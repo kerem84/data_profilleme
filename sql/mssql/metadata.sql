@@ -16,7 +16,9 @@ SELECT
     CASE WHEN c.is_nullable = 1 THEN 'YES' ELSE 'NO' END AS is_nullable,
     dc.definition AS column_default,
     CASE WHEN pk.column_id IS NOT NULL THEN 1 ELSE 0 END AS is_primary_key,
+    pk.pk_name AS pk_constraint,
     CASE WHEN fkc.parent_column_id IS NOT NULL THEN 1 ELSE 0 END AS is_foreign_key,
+    fk_obj.name AS fk_constraint,
     rs.name AS referenced_schema,
     rt.name AS referenced_table,
     rc.name AS referenced_column
@@ -26,7 +28,7 @@ INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
 INNER JOIN sys.types tp ON c.user_type_id = tp.user_type_id
 LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
 LEFT JOIN (
-    SELECT ic.object_id, ic.column_id
+    SELECT ic.object_id, ic.column_id, i.name AS pk_name
     FROM sys.index_columns ic
     INNER JOIN sys.indexes i
         ON ic.object_id = i.object_id AND ic.index_id = i.index_id
@@ -34,6 +36,8 @@ LEFT JOIN (
 ) pk ON c.object_id = pk.object_id AND c.column_id = pk.column_id
 LEFT JOIN sys.foreign_key_columns fkc
     ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
+LEFT JOIN sys.foreign_keys fk_obj
+    ON fkc.constraint_object_id = fk_obj.object_id
 LEFT JOIN sys.tables rt ON fkc.referenced_object_id = rt.object_id
 LEFT JOIN sys.schemas rs ON rt.schema_id = rs.schema_id
 LEFT JOIN sys.columns rc

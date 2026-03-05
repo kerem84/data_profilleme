@@ -100,38 +100,45 @@ class PatternAnalyzer:
             params = {"max_sample": self.max_sample}
 
         try:
-            with conn.cursor() as cur:
-                cur.execute(sql, params)
+            cur = conn.cursor()
+            try:
+                if params:
+                    cur.execute(sql, params)
+                else:
+                    cur.execute(sql)
                 row = cur.fetchone()
-                if not row:
-                    return None
+            finally:
+                cur.close()
 
-                sample_size = row[0]
-                if sample_size == 0:
-                    return None
+            if not row:
+                return None
 
-                patterns_result: Dict[str, float] = {}
-                col_idx = 1
-                for pattern_name in self.patterns:
-                    match_count = row[col_idx] or 0
-                    ratio = round(match_count / sample_size, 6)
-                    if ratio > 0:
-                        patterns_result[pattern_name] = ratio
-                    col_idx += 1
+            sample_size = row[0]
+            if sample_size == 0:
+                return None
 
-                dominant = None
-                if patterns_result:
-                    dominant = max(patterns_result, key=patterns_result.get)
+            patterns_result: Dict[str, float] = {}
+            col_idx = 1
+            for pattern_name in self.patterns:
+                match_count = row[col_idx] or 0
+                ratio = round(match_count / sample_size, 6)
+                if ratio > 0:
+                    patterns_result[pattern_name] = ratio
+                col_idx += 1
 
-                total_classified = sum(min(v, 1.0) for v in patterns_result.values())
-                unclassified = max(0, 1.0 - total_classified)
+            dominant = None
+            if patterns_result:
+                dominant = max(patterns_result, key=patterns_result.get)
 
-                return {
-                    "patterns": patterns_result,
-                    "dominant_pattern": dominant,
-                    "unclassified_ratio": round(unclassified, 6),
-                    "sample_size": sample_size,
-                }
+            total_classified = sum(min(v, 1.0) for v in patterns_result.values())
+            unclassified = max(0, 1.0 - total_classified)
+
+            return {
+                "patterns": patterns_result,
+                "dominant_pattern": dominant,
+                "unclassified_ratio": round(unclassified, 6),
+                "sample_size": sample_size,
+            }
 
         except Exception as e:
             logger.warning(
