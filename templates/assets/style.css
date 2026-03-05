@@ -73,6 +73,7 @@ body {
 .badge-c { background: var(--grade-c); color: #7c5e00; }
 .badge-d { background: var(--grade-d); color: #7c3500; }
 .badge-f { background: var(--grade-f); color: #7c0000; }
+.badge-na { background: #e5e7eb; color: #6b7280; }
 
 /* Tables */
 table {

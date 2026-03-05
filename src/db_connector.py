@@ -7,17 +7,17 @@ from typing import Any, Dict, Generator, List, Optional
 import psycopg2
 import psycopg2.extras
 
+from src.base_connector import BaseConnector
 from src.config_loader import DatabaseConfig
 
 logger = logging.getLogger(__name__)
 
 
-class DatabaseConnector:
+class PostgresConnector(BaseConnector):
     """psycopg2 tabanli read-only PostgreSQL baglanti yoneticisi."""
 
     def __init__(self, config: DatabaseConfig):
-        self.config = config
-        self._conn: Optional[psycopg2.extensions.connection] = None
+        super().__init__(config)
 
     @contextmanager
     def connection(self) -> Generator[psycopg2.extensions.connection, None, None]:
@@ -51,22 +51,8 @@ class DatabaseConnector:
                     return [dict(row) for row in cur.fetchall()]
         return None
 
-    def execute_query_with_conn(
-        self,
-        conn: psycopg2.extensions.connection,
-        sql: str,
-        params: Optional[Dict[str, Any]] = None,
-        fetch: bool = True,
-    ) -> Optional[List[Dict[str, Any]]]:
-        """Mevcut baglanti ile SQL calistir."""
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, params)
-            if fetch:
-                return [dict(row) for row in cur.fetchall()]
-        return None
-
     def test_connection(self) -> bool:
-        """Baglanti testi. Basarili ise True doner."""
+        """Baglanti testi."""
         try:
             with self.connection() as conn:
                 with conn.cursor() as cur:
@@ -96,7 +82,6 @@ class DatabaseConnector:
         rows = self.execute_query(sql)
         all_schemas = [r["schema_name"] for r in rows]
 
-        # Config filtresi uygula
         sf = self.config.schema_filter
         if sf == "*":
             return all_schemas
@@ -120,3 +105,41 @@ class DatabaseConnector:
             ORDER BY t.table_name;
         """
         return self.execute_query(sql, {"schema": schema})
+
+    def get_query_timeout_error(self) -> type:
+        return psycopg2.errors.QueryCanceled
+
+    def get_estimated_row_count(
+        self, conn, schema: str, table: str
+    ) -> Dict[str, Any]:
+        """pg_stat_user_tables'dan tahmini satir sayisi."""
+        sql = """
+            SELECT COALESCE(n_live_tup, 0) AS estimated_rows
+            FROM pg_stat_user_tables
+            WHERE schemaname = %(schema)s AND relname = %(table)s;
+        """
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"schema": schema, "table": table})
+                result = cur.fetchone()
+                count = result[0] if result else 0
+                return {"row_count": int(count), "estimated": True}
+        except Exception:
+            return {"row_count": 0, "estimated": True}
+
+    def validate_db_type(self, conn) -> bool:
+        """PostgreSQL sunucu dogrulamasi."""
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT version()")
+                version = cur.fetchone()[0]
+                if "PostgreSQL" not in version:
+                    logger.error(
+                        "[%s] db_type=postgresql ama sunucu PostgreSQL degil: %s",
+                        self.config.alias, version,
+                    )
+                    return False
+            return True
+        except Exception as e:
+            logger.warning("[%s] db_type dogrulama hatasi: %s", self.config.alias, e)
+            return True

@@ -72,11 +72,12 @@ class HtmlReportGenerator:
         return output_path
 
     def _calc_grade_distribution(self, profile: DatabaseProfile) -> Dict[str, int]:
-        """Tablo bazinda kalite notu dagilimi."""
+        """Tablo bazinda kalite notu dagilimi (bos tablolar haric)."""
         grades: List[str] = []
         for schema in profile.schemas:
             for table in schema.tables:
-                grades.append(table.table_quality_grade)
+                if table.table_quality_grade != "N/A":
+                    grades.append(table.table_quality_grade)
         counter = Counter(grades)
         return {g: counter.get(g, 0) for g in ["A", "B", "C", "D", "F"]}
 

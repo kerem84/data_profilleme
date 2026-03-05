@@ -3,8 +3,6 @@
 import logging
 from typing import Any, Dict, Optional
 
-import psycopg2
-
 from src.sql_loader import SqlLoader
 
 logger = logging.getLogger(__name__)
@@ -13,15 +11,13 @@ logger = logging.getLogger(__name__)
 class OutlierDetector:
     """Numerik kolonlar icin IQR tabanli outlier tespiti."""
 
-    def __init__(self, sql_loader: SqlLoader):
+    def __init__(self, sql_loader: SqlLoader, connector):
         self.sql = sql_loader
+        self.db_type = connector.config.db_type
+        self._timeout_error = connector.get_query_timeout_error()
 
     def detect(
-        self,
-        conn: psycopg2.extensions.connection,
-        schema: str,
-        table: str,
-        column: str,
+        self, conn, schema: str, table: str, column: str,
         iqr_multiplier: float = 1.5,
     ) -> Optional[Dict[str, Any]]:
         """
@@ -38,7 +34,11 @@ class OutlierDetector:
             )
 
             with conn.cursor() as cur:
-                cur.execute(sql, {"iqr_multiplier": iqr_multiplier})
+                if self.db_type == "mssql":
+                    # MSSQL: ? positional params (multiplier x2)
+                    cur.execute(sql, [iqr_multiplier, iqr_multiplier])
+                else:
+                    cur.execute(sql, {"iqr_multiplier": iqr_multiplier})
                 row = cur.fetchone()
                 if not row or row[0] is None:
                     return None
@@ -68,7 +68,7 @@ class OutlierDetector:
                     "outlier_ratio": outlier_ratio,
                 }
 
-        except psycopg2.errors.QueryCanceled:
+        except self._timeout_error:
             logger.warning("[%s.%s.%s] outlier detection timeout", schema, table, column)
         except Exception as e:
             logger.warning("[%s.%s.%s] outlier detection hatasi: %s", schema, table, column, e)
