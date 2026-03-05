@@ -1,0 +1,11 @@
+output/
+!output/.gitkeep
+__pycache__/
+*.pyc
+.env
+config/config.yaml
+*.egg-info/
+dist/
+build/
+.venv/
+.claude/

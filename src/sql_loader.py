@@ -1,0 +1,52 @@
+"""SQL template yukleyici ve parametre enjeksiyonu."""
+
+import os
+import re
+from typing import Dict
+
+_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+class SqlLoader:
+    """SQL dosyalarini yukler, identifier parametrelerini guvenli sekilde yerlestirir."""
+
+    def __init__(self, sql_dir: str):
+        self.sql_dir = sql_dir
+        self._cache: Dict[str, str] = {}
+
+    def load(self, template_name: str, **identifier_params: str) -> str:
+        """
+        SQL sablonunu yukle, identifier parametrelerini yerlestirir.
+
+        identifier_params: schema_name, table_name, column_name gibi SQL identifier'lari.
+        Bunlar {param} formatinda sablonda yer alir ve validate edilir.
+        psycopg2 %(param)s formatindaki value parametreleri dokunulmaz.
+        """
+        if template_name not in self._cache:
+            file_path = os.path.join(self.sql_dir, f"{template_name}.sql")
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"SQL sablonu bulunamadi: {file_path}")
+            with open(file_path, "r", encoding="utf-8") as f:
+                self._cache[template_name] = f.read()
+
+        sql = self._cache[template_name]
+
+        # Identifier parametrelerini validate ve yerlestirir
+        for key, value in identifier_params.items():
+            quoted = self.validate_identifier(value)
+            sql = sql.replace(f"{{{key}}}", quoted)
+
+        return sql
+
+    @staticmethod
+    def validate_identifier(name: str) -> str:
+        """
+        SQL identifier'ini dogrula ve quote et.
+        Sadece alphanumeric ve underscore kabul edilir.
+        """
+        if not _IDENTIFIER_RE.match(name):
+            raise ValueError(
+                f"Gecersiz SQL identifier: '{name}'. "
+                "Sadece harf, rakam ve alt cizgi kabul edilir."
+            )
+        return f'"{name}"'
