@@ -24,6 +24,7 @@ GRADE_FILLS = {
     "C": PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
     "D": PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid"),
     "F": PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid"),
+    "N/A": PatternFill(start_color="E5E7EB", end_color="E5E7EB", fill_type="solid"),
 }
 THIN_BORDER = Border(
     left=Side(style="thin"),

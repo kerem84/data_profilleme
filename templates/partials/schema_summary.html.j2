@@ -32,8 +32,8 @@
           </td>
           <td>{{ "{:,}".format(table.row_count) }}{% if table.row_count_estimated %} *{% endif %}</td>
           <td>{{ table.column_count }}</td>
-          <td>{{ "%.1f"|format(table.table_quality_score * 100) }}%</td>
-          <td><span class="badge badge-{{ table.table_quality_grade|lower }}">{{ table.table_quality_grade }}</span></td>
+          <td>{% if table.table_quality_grade != 'N/A' %}{{ "%.1f"|format(table.table_quality_score * 100) }}%{% else %}-{% endif %}</td>
+          <td><span class="badge badge-{{ table.table_quality_grade|lower|replace('/', '') }}">{{ table.table_quality_grade }}</span></td>
           <td>{{ table.profile_duration_sec }}s</td>
         </tr>
       {% endfor %}

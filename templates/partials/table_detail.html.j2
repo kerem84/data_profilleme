@@ -1,7 +1,7 @@
 <!-- Tablo detay -->
 <details id="table-{{ schema.schema_name }}-{{ table.table_name }}" style="margin-top:8px; border-color: #d1d5db;">
   <summary style="font-size:13px;">
-    <span class="badge badge-{{ table.table_quality_grade|lower }}">{{ table.table_quality_grade }}</span>
+    <span class="badge badge-{{ table.table_quality_grade|lower|replace('/', '') }}">{{ table.table_quality_grade }}</span>
     {{ table.table_name }}
     <span style="color:var(--text-muted); font-size:12px;">
       ({{ "{:,}".format(table.row_count) }} satir, {{ table.column_count }} kolon{% if table.sampled %}, sampled {{ table.sample_percent }}%{% endif %})
@@ -43,7 +43,7 @@
           <td>{{ "{:,}".format(col.distinct_count) }}</td>
           <td title="{{ col.min_value or '' }}">{{ (col.min_value or '')[:30] }}</td>
           <td title="{{ col.max_value or '' }}">{{ (col.max_value or '')[:30] }}</td>
-          <td><span class="badge badge-{{ col.quality_grade|lower }}">{{ col.quality_grade }} {{ "%.0f"|format(col.quality_score * 100) }}</span></td>
+          <td><span class="badge badge-{{ col.quality_grade|lower|replace('/', '') }}">{{ col.quality_grade }}{% if col.quality_grade != 'N/A' %} {{ "%.0f"|format(col.quality_score * 100) }}{% endif %}</span></td>
           <td style="font-size:11px; color:var(--text-muted);">{{ col.quality_flags|join(', ') }}</td>
         </tr>
       {% endfor %}

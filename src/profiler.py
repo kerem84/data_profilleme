@@ -174,7 +174,10 @@ class Profiler:
         )
         db_profile.total_rows = sum(s.total_rows for s in db_profile.schemas)
 
-        scored_schemas = [s for s in db_profile.schemas if s.table_count > 0]
+        scored_schemas = [
+            s for s in db_profile.schemas
+            if s.schema_quality_score > 0
+        ]
         if scored_schemas:
             db_profile.overall_quality_score = sum(
                 s.schema_quality_score for s in scored_schemas
@@ -217,8 +220,11 @@ class Profiler:
 
                 pbar.update(1)
 
-        # Schema quality
-        scored_tables = [t for t in schema_prof.tables if t.column_count > 0]
+        # Schema quality (bos tablolar haric)
+        scored_tables = [
+            t for t in schema_prof.tables
+            if t.row_count > 0 and t.table_quality_grade != "N/A"
+        ]
         if scored_tables:
             schema_prof.schema_quality_score = sum(
                 t.table_quality_score for t in scored_tables
@@ -302,13 +308,17 @@ class Profiler:
                     schema, table, cm.get("column_name", "?"), e,
                 )
 
-        # Table quality
-        scored_cols = [c for c in columns if c.quality_score > 0]
-        tq_score = 0.0
-        tq_grade = "F"
-        if scored_cols:
-            tq_score = sum(c.quality_score for c in scored_cols) / len(scored_cols)
-            tq_grade = self.quality.grade(tq_score)
+        # Table quality (bos tablolar N/A olur, ortalamaya dahil edilmez)
+        if row_count == 0:
+            tq_score = 0.0
+            tq_grade = "N/A"
+        else:
+            scored_cols = [c for c in columns if c.quality_score > 0]
+            tq_score = 0.0
+            tq_grade = "N/A"
+            if scored_cols:
+                tq_score = sum(c.quality_score for c in scored_cols) / len(scored_cols)
+                tq_grade = self.quality.grade(tq_score)
 
         duration = time.time() - start_time
 
@@ -353,6 +363,7 @@ class Profiler:
 
         if row_count == 0:
             col_prof.quality_flags.append("empty_table")
+            col_prof.quality_grade = "N/A"
             return col_prof
 
         # Basic metrics
