@@ -33,6 +33,11 @@ class ColumnProfile:
     is_nullable: str
     is_primary_key: bool
     is_foreign_key: bool
+    pk_constraint: Optional[str] = None
+    fk_constraint: Optional[str] = None
+    referenced_schema: Optional[str] = None
+    referenced_table: Optional[str] = None
+    referenced_column: Optional[str] = None
     # Basic
     null_count: int = 0
     null_ratio: float = 0.0
@@ -373,6 +378,11 @@ class Profiler:
             is_nullable=col_meta.get("is_nullable", "YES"),
             is_primary_key=bool(col_meta.get("is_primary_key", False)),
             is_foreign_key=bool(col_meta.get("is_foreign_key", False)),
+            pk_constraint=col_meta.get("pk_constraint"),
+            fk_constraint=col_meta.get("fk_constraint"),
+            referenced_schema=col_meta.get("referenced_schema"),
+            referenced_table=col_meta.get("referenced_table"),
+            referenced_column=col_meta.get("referenced_column"),
         )
 
         if row_count == 0:

@@ -183,13 +183,13 @@ Raporlar `output/` dizinine uretilir:
 
 | Sheet | Icerik |
 |-------|--------|
-| Ozet | Veritabani geneli |
-| Schema Ozet | Sema bazinda tablo sayisi, satir, kalite |
-| Tablo Profil | Tablo bazinda metrikler |
-| Kolon Profil | Kolon bazinda tum metrikler |
-| Top Degerler | En sik degerler |
-| Pattern Analiz | String pattern sonuclari |
-| Outlier Rapor | Numerik outlier bilgileri |
+| **Ozet** | Veritabani geneli: toplam sema/tablo/kolon/satir sayilari, genel kalite skoru |
+| **Schema Ozet** | Sema bazinda tablo sayisi, toplam satir, ortalama kalite skoru |
+| **Tablo Profil** | Her tablo icin satir sayisi, kolon sayisi, kalite notu, profilleme suresi |
+| **Kolon Profil** | Kolon bazinda NULL orani, distinct sayisi, min/max, PK/FK bilgisi, kalite skoru ve bayraklar |
+| **Top Degerler** | Her kolondaki en sik tekrar eden N deger ve tekrar sayilari (kardinalite analizi) |
+| **Pattern Analiz** | String kolonlarda tespit edilen veri desenleri (email, telefon, TC kimlik, UUID, tarih, URL vb.) ve esleme oranlari. Ornegin bir kolondaki verilerin %92'si email formatinda gibi |
+| **Outlier Rapor** | Numerik kolonlarda IQR (Interquartile Range) yontemiyle tespit edilen asiri sapan degerler, alt/ust sinirlar ve outlier orani |
 
 ### Kalite Notu
 
