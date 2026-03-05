@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from tqdm import tqdm
 
 from src.config_loader import AppConfig
-from src.db_connector import DatabaseConnector
+from src.connector_factory import create_connector
 from src.metrics.basic import BasicMetrics
 from src.metrics.distribution import DistributionMetrics, is_numeric_type
 from src.metrics.pattern import PatternAnalyzer, is_string_type
@@ -114,18 +114,20 @@ class Profiler:
     def __init__(self, config: AppConfig, db_key: str):
         self.config = config
         self.db_config = config.databases[db_key]
-        self.connector = DatabaseConnector(self.db_config)
+        self.connector = create_connector(self.db_config)
         self.sql = SqlLoader(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "sql")
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "sql"),
+            db_type=self.db_config.db_type,
         )
-        self.basic = BasicMetrics(self.sql)
-        self.distribution = DistributionMetrics(self.sql)
+        self.basic = BasicMetrics(self.sql, self.connector)
+        self.distribution = DistributionMetrics(self.sql, self.connector)
         self.pattern = PatternAnalyzer(
             self.sql,
             config.profiling.string_patterns,
             config.profiling.max_pattern_sample,
+            db_type=self.db_config.db_type,
         )
-        self.outlier = OutlierDetector(self.sql)
+        self.outlier = OutlierDetector(self.sql, self.connector)
         self.quality = QualityScorer(config.profiling.quality_weights)
         self.prof_config = config.profiling
 
@@ -141,6 +143,15 @@ class Profiler:
         if not self.connector.test_connection():
             logger.error("[%s] Baglanti kurulamadi, profilleme iptal.", self.db_config.alias)
             return db_profile
+
+        # DB tipi dogrulama
+        with self.connector.connection() as conn:
+            if not self.connector.validate_db_type(conn):
+                logger.error(
+                    "[%s] db_type=%s ile sunucu uyumsuz, profilleme iptal.",
+                    self.db_config.alias, self.db_config.db_type,
+                )
+                return db_profile
 
         schemas = self.connector.discover_schemas()
         logger.info("[%s] %d sema kesfedildi: %s", self.db_config.alias, len(schemas), schemas)
@@ -238,10 +249,13 @@ class Profiler:
         schema: str,
     ) -> Dict[str, List[Dict]]:
         """Sema icin tum kolon metadata'sini tek sorguda cek."""
-        sql = self.sql.load("metadata")  # No identifier params, uses %(schema_name)s
+        sql = self.sql.load("metadata")
         try:
             with conn.cursor() as cur:
-                cur.execute(sql, {"schema_name": schema})
+                if self.db_config.db_type == "mssql":
+                    cur.execute(sql, [schema])
+                else:
+                    cur.execute(sql, {"schema_name": schema})
                 cols = [desc[0] for desc in cur.description]
                 rows = cur.fetchall()
         except Exception as e:

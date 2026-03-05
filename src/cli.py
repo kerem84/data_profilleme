@@ -35,7 +35,7 @@ def setup_logging(level: str, log_file: str) -> None:
 def parse_args() -> argparse.Namespace:
     """CLI argumanlari."""
     parser = argparse.ArgumentParser(
-        description="PostgreSQL Kaynak Tablo Profilleme Araci",
+        description="Kaynak Tablo Profilleme Araci (PostgreSQL / MSSQL)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -85,13 +85,13 @@ def parse_args() -> argparse.Namespace:
 
 def run_dry_run(config: AppConfig, db_key: str = None) -> None:
     """Tablo listesini goster, profilleme yapma."""
-    from src.db_connector import DatabaseConnector
+    from src.connector_factory import create_connector
 
     db_keys = [db_key] if db_key else list(config.databases.keys())
 
     for key in db_keys:
         db_config = config.databases[key]
-        connector = DatabaseConnector(db_config)
+        connector = create_connector(db_config)
 
         if not connector.test_connection():
             print(f"[{key}] Baglanti kurulamadi!")

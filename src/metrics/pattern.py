@@ -1,18 +1,39 @@
 """String kolon pattern analizi."""
 
 import logging
-from typing import Any, Dict, List, Optional
-
-import psycopg2
+from typing import Any, Dict, Optional
 
 from src.sql_loader import SqlLoader
 
 logger = logging.getLogger(__name__)
 
-# String veri tipleri
+# String veri tipleri (PostgreSQL + MSSQL)
 STRING_TYPES = {
+    # PostgreSQL
     "character varying", "varchar", "character", "char", "text",
     "name", "citext", "bpchar",
+    # MSSQL
+    "nvarchar", "nchar", "ntext",
+}
+
+# MSSQL icin bilinen pattern'lerin LIKE/PATINDEX karsiliklari
+_MSSQL_PATTERN_MAP = {
+    "email": "PATINDEX('_%@_%._%', val) > 0",
+    "phone_tr": (
+        "(val LIKE '+90[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'"
+        " OR val LIKE '0[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'"
+        " OR (LEN(val) = 10 AND PATINDEX('%[^0-9]%', val) = 0))"
+    ),
+    "tc_kimlik": "(LEN(val) = 11 AND LEFT(val, 1) <> '0' AND PATINDEX('%[^0-9]%', val) = 0)",
+    "uuid": (
+        "(LEN(val) = 36 AND SUBSTRING(val,9,1) = '-' AND SUBSTRING(val,14,1) = '-'"
+        " AND SUBSTRING(val,19,1) = '-' AND SUBSTRING(val,24,1) = '-')"
+    ),
+    "iso_date": "(LEN(val) >= 10 AND PATINDEX('[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]%', val) = 1)",
+    "iso_datetime": "(LEN(val) >= 16 AND PATINDEX('[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ][0-9][0-9]:[0-9][0-9]%', val) = 1)",
+    "url": "(val LIKE 'http://%' OR val LIKE 'https://%')",
+    "json_object": "(LEFT(val, 1) = '{' AND RIGHT(val, 1) = '}')",
+    "numeric_string": "(PATINDEX('%[^0-9.+-]%', val) = 0 AND LEN(val) > 0)",
 }
 
 
@@ -22,20 +43,19 @@ def is_string_type(data_type: str) -> bool:
 
 
 class PatternAnalyzer:
-    """Regex tabanli string pattern tespiti."""
+    """Regex/PATINDEX tabanli string pattern tespiti."""
 
-    def __init__(self, sql_loader: SqlLoader, patterns: Dict[str, str], max_sample: int):
+    def __init__(
+        self, sql_loader: SqlLoader, patterns: Dict[str, str],
+        max_sample: int, db_type: str = "postgresql",
+    ):
         self.sql = sql_loader
         self.patterns = patterns
         self.max_sample = max_sample
+        self.db_type = db_type
 
     def analyze(
-        self,
-        conn: psycopg2.extensions.connection,
-        schema: str,
-        table: str,
-        column: str,
-        row_count: int,
+        self, conn, schema: str, table: str, column: str, row_count: int,
     ) -> Optional[Dict[str, Any]]:
         """
         String kolonda pattern analizi yap.
@@ -44,31 +64,44 @@ class PatternAnalyzer:
         if row_count == 0 or not self.patterns:
             return None
 
-        # Pattern cases SQL parcasi olustur
         pattern_cases = self._build_pattern_cases()
         if not pattern_cases:
             return None
 
-        # SQL'i dogrudan olustur (pattern_cases bir SQL fragment, identifier degil)
-        quoted_schema = SqlLoader.validate_identifier(schema)
-        quoted_table = SqlLoader.validate_identifier(table)
-        quoted_column = SqlLoader.validate_identifier(column)
+        quoted_schema = self.sql.validate_identifier(schema)
+        quoted_table = self.sql.validate_identifier(table)
+        quoted_column = self.sql.validate_identifier(column)
 
-        sql = f"""
-            SELECT
-                COUNT(*) AS sample_size,
-                {pattern_cases}
-            FROM (
-                SELECT {quoted_column}::text AS val
-                FROM {quoted_schema}.{quoted_table}
-                WHERE {quoted_column} IS NOT NULL
-                LIMIT %(max_sample)s
-            ) sub;
-        """
+        if self.db_type == "mssql":
+            sql = f"""
+                SELECT
+                    COUNT(*) AS sample_size,
+                    {pattern_cases}
+                FROM (
+                    SELECT TOP ({self.max_sample})
+                        CAST({quoted_column} AS NVARCHAR(MAX)) AS val
+                    FROM {quoted_schema}.{quoted_table}
+                    WHERE {quoted_column} IS NOT NULL
+                ) sub;
+            """
+            params = None
+        else:
+            sql = f"""
+                SELECT
+                    COUNT(*) AS sample_size,
+                    {pattern_cases}
+                FROM (
+                    SELECT {quoted_column}::text AS val
+                    FROM {quoted_schema}.{quoted_table}
+                    WHERE {quoted_column} IS NOT NULL
+                    LIMIT %(max_sample)s
+                ) sub;
+            """
+            params = {"max_sample": self.max_sample}
 
         try:
             with conn.cursor() as cur:
-                cur.execute(sql, {"max_sample": self.max_sample})
+                cur.execute(sql, params)
                 row = cur.fetchone()
                 if not row:
                     return None
@@ -77,7 +110,6 @@ class PatternAnalyzer:
                 if sample_size == 0:
                     return None
 
-                # Sonuclari isle
                 patterns_result: Dict[str, float] = {}
                 col_idx = 1
                 for pattern_name in self.patterns:
@@ -87,12 +119,10 @@ class PatternAnalyzer:
                         patterns_result[pattern_name] = ratio
                     col_idx += 1
 
-                # Dominant pattern
                 dominant = None
                 if patterns_result:
                     dominant = max(patterns_result, key=patterns_result.get)
 
-                # Unclassified ratio
                 total_classified = sum(min(v, 1.0) for v in patterns_result.values())
                 unclassified = max(0, 1.0 - total_classified)
 
@@ -103,22 +133,36 @@ class PatternAnalyzer:
                     "sample_size": sample_size,
                 }
 
-        except psycopg2.errors.QueryCanceled:
-            logger.warning("[%s.%s.%s] pattern analysis timeout", schema, table, column)
         except Exception as e:
-            logger.warning("[%s.%s.%s] pattern analysis hatasi: %s", schema, table, column, e)
+            logger.warning(
+                "[%s.%s.%s] pattern analysis hatasi: %s", schema, table, column, e
+            )
 
         return None
 
     def _build_pattern_cases(self) -> str:
         """SQL pattern CASE ifadelerini olustur."""
+        if self.db_type == "mssql":
+            return self._build_mssql_pattern_cases()
+        return self._build_pg_pattern_cases()
+
+    def _build_pg_pattern_cases(self) -> str:
+        """PostgreSQL regex (~) tabanli pattern ifadeleri."""
         cases = []
         for pattern_name, regex in self.patterns.items():
-            # Regex'i SQL string olarak escape et
             escaped_regex = regex.replace("'", "''")
-            # psycopg2 icin % karakterlerini %% olarak escape et
             escaped_regex = escaped_regex.replace("%", "%%")
             cases.append(
                 f"SUM(CASE WHEN val ~ '{escaped_regex}' THEN 1 ELSE 0 END) AS pattern_{pattern_name}"
+            )
+        return ",\n                ".join(cases)
+
+    def _build_mssql_pattern_cases(self) -> str:
+        """MSSQL LIKE/PATINDEX tabanli pattern ifadeleri."""
+        cases = []
+        for pattern_name in self.patterns:
+            expr = _MSSQL_PATTERN_MAP.get(pattern_name, "1=0")
+            cases.append(
+                f"SUM(CASE WHEN {expr} THEN 1 ELSE 0 END) AS pattern_{pattern_name}"
             )
         return ",\n                ".join(cases)

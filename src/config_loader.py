@@ -7,6 +7,9 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 
+VALID_DB_TYPES = ("postgresql", "mssql")
+
+
 @dataclass
 class DatabaseConfig:
     alias: str
@@ -15,9 +18,11 @@ class DatabaseConfig:
     dbname: str
     user: str
     password: str
+    db_type: str = "postgresql"
     connect_timeout: int = 15
     statement_timeout: int = 300000
     schema_filter: Union[str, List[str]] = "*"
+    driver: str = "ODBC Driver 17 for SQL Server"
 
 
 @dataclass
@@ -97,6 +102,12 @@ def load_config(path: str) -> AppConfig:
     databases: Dict[str, DatabaseConfig] = {}
     for alias, db_data in db_raw.items():
         _require_keys(db_data, ["host", "port", "dbname", "user", "password"], f"databases.{alias}")
+        db_type = db_data.get("db_type", "postgresql")
+        if db_type not in VALID_DB_TYPES:
+            raise ConfigError(
+                f"Gecersiz db_type: '{db_type}' (databases.{alias}). "
+                f"Gecerli degerler: {', '.join(VALID_DB_TYPES)}"
+            )
         databases[alias] = DatabaseConfig(
             alias=alias,
             host=db_data["host"],
@@ -104,9 +115,11 @@ def load_config(path: str) -> AppConfig:
             dbname=db_data["dbname"],
             user=db_data["user"],
             password=db_data["password"],
+            db_type=db_type,
             connect_timeout=int(db_data.get("connect_timeout", 15)),
             statement_timeout=int(db_data.get("statement_timeout", 300000)),
             schema_filter=db_data.get("schema_filter", "*"),
+            driver=db_data.get("driver", "ODBC Driver 17 for SQL Server"),
         )
 
     # Profiling

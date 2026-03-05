@@ -3,17 +3,18 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-import psycopg2
-
 from src.sql_loader import SqlLoader
 
 logger = logging.getLogger(__name__)
 
-# Numerik veri tipleri
+# Numerik veri tipleri (PostgreSQL + MSSQL)
 NUMERIC_TYPES = {
+    # PostgreSQL
     "smallint", "integer", "bigint", "decimal", "numeric",
     "real", "double precision", "serial", "bigserial",
     "int2", "int4", "int8", "float4", "float8", "money",
+    # MSSQL
+    "int", "tinyint", "float", "bit", "smallmoney",
 }
 
 
@@ -25,17 +26,14 @@ def is_numeric_type(data_type: str) -> bool:
 class DistributionMetrics:
     """Deger dagilimi ve numerik istatistik hesaplayici."""
 
-    def __init__(self, sql_loader: SqlLoader):
+    def __init__(self, sql_loader: SqlLoader, connector):
         self.sql = sql_loader
+        self.db_type = connector.config.db_type
+        self._timeout_error = connector.get_query_timeout_error()
 
     def get_top_n(
-        self,
-        conn: psycopg2.extensions.connection,
-        schema: str,
-        table: str,
-        column: str,
-        top_n: int,
-        row_count: int,
+        self, conn, schema: str, table: str, column: str,
+        top_n: int, row_count: int,
     ) -> List[Dict[str, Any]]:
         """En sik N degeri dondur."""
         if row_count == 0:
@@ -49,13 +47,17 @@ class DistributionMetrics:
                 column_name=column,
             )
             with conn.cursor() as cur:
-                cur.execute(sql, {"total_count": row_count, "top_n": top_n})
+                if self.db_type == "mssql":
+                    # MSSQL: TOP (?), ? -> top_n, total_count
+                    cur.execute(sql, [top_n, row_count])
+                else:
+                    cur.execute(sql, {"total_count": row_count, "top_n": top_n})
                 rows = cur.fetchall()
                 return [
                     {"value": str(r[0]), "frequency": r[1], "pct": float(r[2])}
                     for r in rows
                 ]
-        except psycopg2.errors.QueryCanceled:
+        except self._timeout_error:
             logger.warning("[%s.%s.%s] top_n timeout", schema, table, column)
             return []
         except Exception as e:
@@ -63,11 +65,7 @@ class DistributionMetrics:
             return []
 
     def get_numeric_stats(
-        self,
-        conn: psycopg2.extensions.connection,
-        schema: str,
-        table: str,
-        column: str,
+        self, conn, schema: str, table: str, column: str,
     ) -> Optional[Dict[str, Any]]:
         """Numerik kolon istatistikleri: mean, stddev, percentiles."""
         try:
@@ -92,47 +90,26 @@ class DistributionMetrics:
                         "p95": float(row[7]) if row[7] else None,
                         "p99": float(row[8]) if row[8] else None,
                     }
-        except psycopg2.errors.QueryCanceled:
+        except self._timeout_error:
             logger.warning("[%s.%s.%s] numeric_stats timeout", schema, table, column)
         except Exception as e:
             logger.warning("[%s.%s.%s] numeric_stats hatasi: %s", schema, table, column, e)
         return None
 
     def get_histogram(
-        self,
-        conn: psycopg2.extensions.connection,
-        schema: str,
-        table: str,
-        column: str,
-        buckets: int = 20,
+        self, conn, schema: str, table: str, column: str, buckets: int = 20,
     ) -> Optional[List[Dict[str, Any]]]:
         """Numerik kolon icin esit genislikte histogram."""
         try:
-            sql = f"""
-                WITH stats AS (
-                    SELECT
-                        MIN("{column}"::numeric) AS min_val,
-                        MAX("{column}"::numeric) AS max_val
-                    FROM "{schema}"."{table}"
-                    WHERE "{column}" IS NOT NULL
-                ),
-                histogram AS (
-                    SELECT
-                        WIDTH_BUCKET("{column}"::numeric, s.min_val, s.max_val + 0.0001, {buckets}) AS bucket,
-                        COUNT(*) AS freq
-                    FROM "{schema}"."{table}" t, stats s
-                    WHERE "{column}" IS NOT NULL
-                    GROUP BY bucket
-                    ORDER BY bucket
-                )
-                SELECT
-                    h.bucket,
-                    s.min_val + (h.bucket - 1) * (s.max_val - s.min_val) / {buckets} AS lower_bound,
-                    s.min_val + h.bucket * (s.max_val - s.min_val) / {buckets} AS upper_bound,
-                    h.freq
-                FROM histogram h, stats s
-                ORDER BY h.bucket;
-            """
+            sql = self.sql.load(
+                "histogram",
+                schema_name=schema,
+                table_name=table,
+                column_name=column,
+            )
+            # {buckets} literal substitution (integer, safe)
+            sql = sql.replace("{buckets}", str(int(buckets)))
+
             with conn.cursor() as cur:
                 cur.execute(sql)
                 rows = cur.fetchall()
@@ -145,7 +122,7 @@ class DistributionMetrics:
                     }
                     for r in rows
                 ]
-        except psycopg2.errors.QueryCanceled:
+        except self._timeout_error:
             logger.warning("[%s.%s.%s] histogram timeout", schema, table, column)
         except Exception as e:
             logger.warning("[%s.%s.%s] histogram hatasi: %s", schema, table, column, e)

@@ -10,9 +10,15 @@ _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 class SqlLoader:
     """SQL dosyalarini yukler, identifier parametrelerini guvenli sekilde yerlestirir."""
 
-    def __init__(self, sql_dir: str):
-        self.sql_dir = sql_dir
+    def __init__(self, sql_dir: str, db_type: str = "postgresql"):
+        self.sql_dir = os.path.join(sql_dir, db_type)
+        self.db_type = db_type
         self._cache: Dict[str, str] = {}
+
+        if not os.path.isdir(self.sql_dir):
+            raise FileNotFoundError(
+                f"SQL sablon dizini bulunamadi: {self.sql_dir}"
+            )
 
     def load(self, template_name: str, **identifier_params: str) -> str:
         """
@@ -20,7 +26,7 @@ class SqlLoader:
 
         identifier_params: schema_name, table_name, column_name gibi SQL identifier'lari.
         Bunlar {param} formatinda sablonda yer alir ve validate edilir.
-        psycopg2 %(param)s formatindaki value parametreleri dokunulmaz.
+        psycopg2 %(param)s ve pyodbc ? formatindaki value parametreleri dokunulmaz.
         """
         if template_name not in self._cache:
             file_path = os.path.join(self.sql_dir, f"{template_name}.sql")
@@ -38,15 +44,16 @@ class SqlLoader:
 
         return sql
 
-    @staticmethod
-    def validate_identifier(name: str) -> str:
+    def validate_identifier(self, name: str) -> str:
         """
-        SQL identifier'ini dogrula ve quote et.
-        Sadece alphanumeric ve underscore kabul edilir.
+        SQL identifier'ini dogrula ve dialect'e gore quote et.
+        PostgreSQL: "name", MSSQL: [name]
         """
         if not _IDENTIFIER_RE.match(name):
             raise ValueError(
                 f"Gecersiz SQL identifier: '{name}'. "
                 "Sadece harf, rakam ve alt cizgi kabul edilir."
             )
+        if self.db_type == "mssql":
+            return f"[{name}]"
         return f'"{name}"'

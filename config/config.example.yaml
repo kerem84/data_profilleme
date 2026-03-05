@@ -7,7 +7,9 @@ project:
 
 # Herhangi sayida DB tanimlanabilir. Alias isimleri serbesttir.
 databases:
+  # PostgreSQL ornegi
   ytp:
+    db_type: "postgresql"          # "postgresql" veya "mssql"
     host: "HOSTNAME"
     port: 5432
     dbname: "DBNAME"
@@ -17,13 +19,15 @@ databases:
     statement_timeout: 300000
     schema_filter: "*"  # "*" = tum non-system semalar, veya liste: ["schema1", "schema2"]
 
-  # Ikinci DB ornegi:
-  # cm:
+  # MSSQL ornegi:
+  # erp:
+  #   db_type: "mssql"
   #   host: "HOSTNAME"
-  #   port: 5432
+  #   port: 1433
   #   dbname: "DBNAME"
   #   user: "USERNAME"
   #   password: "PASSWORD"
+  #   driver: "ODBC Driver 17 for SQL Server"   # Sistemdeki ODBC driver adi
   #   connect_timeout: 15
   #   statement_timeout: 300000
   #   schema_filter: "*"
