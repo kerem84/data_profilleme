@@ -108,6 +108,7 @@ class ExcelReportGenerator:
             ["Toplam Tablo", profile.total_tables],
             ["Toplam Kolon", profile.total_columns],
             ["Toplam Satir", f"{profile.total_rows:,}"],
+            ["Toplam Boyut", profile.total_size_display or "-"],
             ["Genel Kalite Skoru", f"{profile.overall_quality_score:.2%}"],
         ]
         for row_idx, (label, value) in enumerate(data, 1):
@@ -120,21 +121,22 @@ class ExcelReportGenerator:
     def _write_schema_summary(self, wb: Workbook, profile: DatabaseProfile) -> None:
         """Schema Ozet sheeti."""
         ws = wb.create_sheet("Schema Ozet")
-        headers = ["Sema", "Tablo Sayisi", "Toplam Satir", "Kalite Skoru", "Kalite Notu"]
+        headers = ["Sema", "Tablo Sayisi", "Toplam Satir", "Toplam Boyut", "Kalite Skoru", "Kalite Notu"]
         self._apply_header(ws, headers)
 
         for row_idx, schema in enumerate(profile.schemas, 2):
             ws.cell(row=row_idx, column=1, value=schema.schema_name)
             ws.cell(row=row_idx, column=2, value=schema.table_count)
             ws.cell(row=row_idx, column=3, value=schema.total_rows)
-            ws.cell(row=row_idx, column=4, value=round(schema.schema_quality_score, 4))
+            ws.cell(row=row_idx, column=4, value=schema.total_size_display or "-")
+            ws.cell(row=row_idx, column=5, value=round(schema.schema_quality_score, 4))
 
             from src.metrics.quality import QualityScorer
             grade = QualityScorer.grade(schema.schema_quality_score)
-            cell = ws.cell(row=row_idx, column=5, value=grade)
+            cell = ws.cell(row=row_idx, column=6, value=grade)
             cell.fill = GRADE_FILLS.get(grade, GRADE_FILLS["F"])
 
-            for col in range(1, 6):
+            for col in range(1, 7):
                 ws.cell(row=row_idx, column=col).border = THIN_BORDER
 
         self._auto_width(ws)
@@ -143,7 +145,7 @@ class ExcelReportGenerator:
         """Tablo Profil sheeti."""
         ws = wb.create_sheet("Tablo Profil")
         headers = [
-            "Sema", "Tablo", "Tip", "Satir Sayisi", "Tahmini",
+            "Sema", "Tablo", "Tip", "Satir Sayisi", "Tahmini", "Boyut",
             "Kolon Sayisi", "Sampling", "Sample %",
             "Kalite Skoru", "Kalite Notu", "Sure (sn)",
         ]
@@ -157,17 +159,18 @@ class ExcelReportGenerator:
                 ws.cell(row=row_idx, column=3, value=table.table_type)
                 ws.cell(row=row_idx, column=4, value=table.row_count)
                 ws.cell(row=row_idx, column=5, value="Evet" if table.row_count_estimated else "Hayir")
-                ws.cell(row=row_idx, column=6, value=table.column_count)
-                ws.cell(row=row_idx, column=7, value="Evet" if table.sampled else "Hayir")
-                ws.cell(row=row_idx, column=8, value=table.sample_percent or "")
-                ws.cell(row=row_idx, column=9, value=round(table.table_quality_score, 4))
+                ws.cell(row=row_idx, column=6, value=table.table_size_display or "-")
+                ws.cell(row=row_idx, column=7, value=table.column_count)
+                ws.cell(row=row_idx, column=8, value="Evet" if table.sampled else "Hayir")
+                ws.cell(row=row_idx, column=9, value=table.sample_percent or "")
+                ws.cell(row=row_idx, column=10, value=round(table.table_quality_score, 4))
 
-                grade_cell = ws.cell(row=row_idx, column=10, value=table.table_quality_grade)
+                grade_cell = ws.cell(row=row_idx, column=11, value=table.table_quality_grade)
                 grade_cell.fill = GRADE_FILLS.get(table.table_quality_grade, GRADE_FILLS["F"])
 
-                ws.cell(row=row_idx, column=11, value=table.profile_duration_sec)
+                ws.cell(row=row_idx, column=12, value=table.profile_duration_sec)
 
-                for col in range(1, 12):
+                for col in range(1, 13):
                     ws.cell(row=row_idx, column=col).border = THIN_BORDER
                 row_idx += 1
 

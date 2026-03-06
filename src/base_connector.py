@@ -53,3 +53,7 @@ class BaseConnector(ABC):
     def validate_db_type(self, conn) -> bool:
         """Konfigurasyon db_type ile gercek veritabani tipini dogrula."""
         ...
+
+    def get_table_size(self, conn, schema: str, table: str) -> Optional[int]:
+        """Tablo boyutunu byte cinsinden dondur. Alt siniflar override edebilir."""
+        return None

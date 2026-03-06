@@ -127,6 +127,20 @@ class PostgresConnector(BaseConnector):
         except Exception:
             return {"row_count": 0, "estimated": True}
 
+    def get_table_size(self, conn, schema: str, table: str) -> Optional[int]:
+        """pg_total_relation_size ile tablo boyutu (index dahil, byte)."""
+        sql = """
+            SELECT pg_total_relation_size(%(full_name)s::regclass)
+        """
+        try:
+            full_name = f'"{schema}"."{table}"'
+            with conn.cursor() as cur:
+                cur.execute(sql, {"full_name": full_name})
+                result = cur.fetchone()
+                return int(result[0]) if result and result[0] is not None else None
+        except Exception:
+            return None
+
     def validate_db_type(self, conn) -> bool:
         """PostgreSQL sunucu dogrulamasi."""
         try:
