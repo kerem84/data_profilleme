@@ -17,6 +17,10 @@
     <div class="value">{{ "{:,}".format(profile.total_rows) }}</div>
   </div>
   <div class="card">
+    <div class="label">Toplam Boyut</div>
+    <div class="value">{{ profile.total_size_display or "-" }}</div>
+  </div>
+  <div class="card">
     <div class="label">Genel Kalite</div>
     <div class="value">{{ "%.1f"|format(profile.overall_quality_score * 100) }}%</div>
     <div class="sub">

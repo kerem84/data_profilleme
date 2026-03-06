@@ -80,6 +80,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Detayli log (DEBUG)",
     )
+    parser.add_argument(
+        "--resume",
+        nargs="?",
+        const=True,
+        default=False,
+        metavar="CHECKPOINT_PATH",
+        help="Onceki checkpoint'tan devam et. Yol verilmezse output_dir'den otomatik aranir.",
+    )
     return parser.parse_args()
 
 
@@ -99,15 +107,22 @@ def run_dry_run(config: AppConfig, db_key: str = None) -> None:
 
         schemas = connector.discover_schemas()
         total = 0
-        for schema in schemas:
-            tables = connector.discover_tables(schema)
-            total += len(tables)
-            print(f"\n[{key}] {schema} ({len(tables)} tablo):")
-            for t in tables:
-                est = t.get("estimated_rows", 0)
-                print(f"  {t['table_name']:40s} ~{est:>12,} satir  ({t.get('table_type', '')})")
+        total_size = 0
+        with connector.connection() as conn:
+            for schema in schemas:
+                tables = connector.discover_tables(schema)
+                total += len(tables)
+                print(f"\n[{key}] {schema} ({len(tables)} tablo):")
+                for t in tables:
+                    est = t.get("estimated_rows", 0)
+                    size = connector.get_table_size(conn, schema, t["table_name"])
+                    size_str = Profiler._format_size(size) if size is not None else "-"
+                    if size:
+                        total_size += size
+                    print(f"  {t['table_name']:40s} ~{est:>12,} satir  {size_str:>10s}  ({t.get('table_type', '')})")
 
-        print(f"\n[{key}] Toplam: {len(schemas)} sema, {total} tablo")
+        total_size_str = Profiler._format_size(total_size) if total_size else "-"
+        print(f"\n[{key}] Toplam: {len(schemas)} sema, {total} tablo, {total_size_str}")
 
 
 def generate_reports(
@@ -214,7 +229,15 @@ def main() -> None:
         if args.schema:
             config.databases[db_key].schema_filter = [args.schema]
 
-        profile = profiler.profile_database()
+        # Resume: checkpoint yukle
+        resumed_profile = None
+        if args.resume:
+            resumed_profile = _load_checkpoint(args.resume, db_key, config.output_dir)
+
+        profile = profiler.profile_database(
+            resumed_profile=resumed_profile,
+            checkpoint_dir=config.output_dir,
+        )
 
         # Mapping annotasyonu
         annotate_with_mapping(config, profile)
@@ -222,19 +245,62 @@ def main() -> None:
         # Ara sonuc kaydet
         json_path = profiler.save_intermediate(profile, config.output_dir)
 
+        # Checkpoint temizle
+        checkpoint_path = os.path.join(
+            config.output_dir, f"profil_{db_key}_checkpoint.json"
+        )
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
+            logger.info("Checkpoint temizlendi: %s", checkpoint_path)
+
         # Raporlar
         generate_reports(config, profile, args.no_excel, args.no_html)
 
         logger.info(
-            "=== %s tamamlandi: %d sema, %d tablo, %d kolon, kalite: %.1f%% ===",
+            "=== %s tamamlandi: %d sema, %d tablo, %d kolon, %s satir, %s, kalite: %.1f%% ===",
             db_key,
             profile.total_schemas,
             profile.total_tables,
             profile.total_columns,
+            f"{profile.total_rows:,}",
+            profile.total_size_display or "-",
             profile.overall_quality_score * 100,
         )
 
     print("\nProfilleme tamamlandi. Raporlar:", config.output_dir)
+
+
+def _load_checkpoint(resume_arg, db_alias: str, output_dir: str):
+    """Checkpoint dosyasini yukle. Bulunamazsa None dondur."""
+    if isinstance(resume_arg, str) and resume_arg is not True:
+        checkpoint_path = resume_arg
+    else:
+        checkpoint_path = os.path.join(output_dir, f"profil_{db_alias}_checkpoint.json")
+
+    if not os.path.exists(checkpoint_path):
+        logger.info("Checkpoint bulunamadi: %s (sifirdan baslanacak)", checkpoint_path)
+        return None
+
+    logger.info("Checkpoint yukleniyor: %s", checkpoint_path)
+    try:
+        with open(checkpoint_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.warning("Checkpoint okunamadi: %s (%s). Sifirdan baslanacak.", checkpoint_path, e)
+        return None
+
+    if data.get("db_alias") != db_alias:
+        logger.warning(
+            "Checkpoint db_alias uyumsuz: beklenen=%s, bulunan=%s. Atlaniyor.",
+            db_alias, data.get("db_alias"),
+        )
+        return None
+
+    profile = _dict_to_profile(data)
+    checkpoint_meta = data.get("_checkpoint", {})
+    completed = checkpoint_meta.get("completed_schemas", [])
+    logger.info("Checkpoint yuklendi: %d sema tamamlanmis (%s)", len(completed), ", ".join(completed))
+    return profile
 
 
 def _dict_to_profile(data: dict) -> DatabaseProfile:

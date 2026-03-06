@@ -190,6 +190,26 @@ class MssqlConnector(BaseConnector):
                 continue
         return {"row_count": 0, "estimated": True}
 
+    def get_table_size(self, conn, schema: str, table: str) -> Optional[int]:
+        """Tablo + index boyutu (byte). sp_spaceused veya sys.allocation_units."""
+        sql = """
+            SELECT SUM(a.total_pages) * 8 * 1024 AS size_bytes
+            FROM sys.tables t
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            INNER JOIN sys.indexes i ON t.object_id = i.object_id
+            INNER JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id
+            INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id
+            WHERE s.name = ? AND t.name = ?
+        """
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, [schema, table])
+            result = cursor.fetchone()
+            cursor.close()
+            return int(result[0]) if result and result[0] is not None else None
+        except Exception:
+            return None
+
     def validate_db_type(self, conn) -> bool:
         """MSSQL sunucu dogrulamasi."""
         try:

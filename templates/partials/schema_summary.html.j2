@@ -6,7 +6,7 @@
     </span>
     <strong>{{ schema.schema_name }}</strong>
     <span style="color:var(--text-muted); font-size:13px;">
-      &mdash; {{ schema.table_count }} tablo, {{ "{:,}".format(schema.total_rows) }} satir
+      &mdash; {{ schema.table_count }} tablo, {{ "{:,}".format(schema.total_rows) }} satir{% if schema.total_size_display %}, {{ schema.total_size_display }}{% endif %}
     </span>
   </summary>
   <div class="content">
@@ -15,6 +15,7 @@
         <tr>
           <th>Tablo</th>
           <th>Satir</th>
+          <th>Boyut</th>
           <th>Kolon</th>
           <th>Kalite</th>
           <th>Not</th>
@@ -31,6 +32,7 @@
             </a>
           </td>
           <td>{{ "{:,}".format(table.row_count) }}{% if table.row_count_estimated %} *{% endif %}</td>
+          <td>{{ table.table_size_display or "-" }}</td>
           <td>{{ table.column_count }}</td>
           <td>{% if table.table_quality_grade != 'N/A' %}{{ "%.1f"|format(table.table_quality_score * 100) }}%{% else %}-{% endif %}</td>
           <td><span class="badge badge-{{ table.table_quality_grade|lower|replace('/', '') }}">{{ table.table_quality_grade }}</span></td>

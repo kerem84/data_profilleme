@@ -76,7 +76,9 @@ class TableProfile:
     row_count: int
     estimated_rows: int
     row_count_estimated: bool
-    column_count: int
+    table_size_bytes: Optional[int] = None
+    table_size_display: str = ""
+    column_count: int = 0
     columns: List[ColumnProfile] = field(default_factory=list)
     profiled_at: str = ""
     profile_duration_sec: float = 0.0
@@ -93,6 +95,8 @@ class SchemaProfile:
     schema_name: str
     table_count: int = 0
     total_rows: int = 0
+    total_size_bytes: Optional[int] = None
+    total_size_display: str = ""
     tables: List[TableProfile] = field(default_factory=list)
     schema_quality_score: float = 0.0
 
@@ -107,6 +111,8 @@ class DatabaseProfile:
     total_tables: int = 0
     total_columns: int = 0
     total_rows: int = 0
+    total_size_bytes: Optional[int] = None
+    total_size_display: str = ""
     schemas: List[SchemaProfile] = field(default_factory=list)
     overall_quality_score: float = 0.0
 
@@ -136,8 +142,12 @@ class Profiler:
         self.quality = QualityScorer(config.profiling.quality_weights)
         self.prof_config = config.profiling
 
-    def profile_database(self) -> DatabaseProfile:
-        """Tum veritabanini profille."""
+    def profile_database(
+        self,
+        resumed_profile: Optional[DatabaseProfile] = None,
+        checkpoint_dir: Optional[str] = None,
+    ) -> DatabaseProfile:
+        """Tum veritabanini profille. Resume ve checkpoint destegi."""
         db_profile = DatabaseProfile(
             db_alias=self.db_config.alias,
             db_name=self.db_config.dbname,
@@ -161,24 +171,57 @@ class Profiler:
         schemas = self.connector.discover_schemas()
         logger.info("[%s] %d sema kesfedildi: %s", self.db_config.alias, len(schemas), schemas)
 
+        # Resume: tamamlanmis semalari belirle
+        completed_schemas: Dict[str, SchemaProfile] = {}
+        if resumed_profile:
+            for sp in resumed_profile.schemas:
+                completed_schemas[sp.schema_name] = sp
+            logger.info(
+                "[%s] Resume: %d sema zaten tamamlanmis, atlaniyor: %s",
+                self.db_config.alias,
+                len(completed_schemas),
+                list(completed_schemas.keys()),
+            )
+
         # Tum tablolari say (progress bar icin)
         total_tables = 0
+        completed_table_count = 0
         schema_tables: Dict[str, List[Dict]] = {}
         for schema in schemas:
+            if schema in completed_schemas:
+                completed_table_count += completed_schemas[schema].table_count
+                continue
             tables = self.connector.discover_tables(schema)
             schema_tables[schema] = tables
             total_tables += len(tables)
 
-        logger.info("[%s] Toplam %d tablo profillecek.", self.db_config.alias, total_tables)
+        logger.info(
+            "[%s] Toplam %d tablo profillecek%s.",
+            self.db_config.alias,
+            total_tables,
+            f" ({completed_table_count} tablo onceden tamamlanmis)" if completed_table_count else "",
+        )
 
-        pbar = tqdm(total=total_tables, desc=f"[{self.db_config.alias}] Profilleme")
+        pbar = tqdm(
+            total=total_tables + completed_table_count,
+            initial=completed_table_count,
+            desc=f"[{self.db_config.alias}] Profilleme",
+        )
         table_idx = 0
 
         for schema in schemas:
+            if schema in completed_schemas:
+                db_profile.schemas.append(completed_schemas[schema])
+                continue
+
             tables = schema_tables[schema]
             schema_prof = self._profile_schema(schema, tables, pbar, table_idx, total_tables)
             db_profile.schemas.append(schema_prof)
             table_idx += len(tables)
+
+            # Checkpoint kaydet
+            if checkpoint_dir:
+                self.save_checkpoint(db_profile, checkpoint_dir)
 
         pbar.close()
 
@@ -189,6 +232,12 @@ class Profiler:
             sum(t.column_count for t in s.tables) for s in db_profile.schemas
         )
         db_profile.total_rows = sum(s.total_rows for s in db_profile.schemas)
+
+        # Total size aggregation
+        sizes = [s.total_size_bytes for s in db_profile.schemas if s.total_size_bytes is not None]
+        if sizes:
+            db_profile.total_size_bytes = sum(sizes)
+            db_profile.total_size_display = self._format_size(db_profile.total_size_bytes)
 
         scored_schemas = [
             s for s in db_profile.schemas
@@ -235,6 +284,12 @@ class Profiler:
                     )
 
                 pbar.update(1)
+
+        # Schema size aggregation
+        sizes = [t.table_size_bytes for t in schema_prof.tables if t.table_size_bytes is not None]
+        if sizes:
+            schema_prof.total_size_bytes = sum(sizes)
+            schema_prof.total_size_display = self._format_size(schema_prof.total_size_bytes)
 
         # Schema quality (bos tablolar haric)
         scored_tables = [
@@ -295,6 +350,10 @@ class Profiler:
         row_count = rc["row_count"]
         row_estimated = rc["estimated"]
 
+        # Table size
+        size_bytes = self.connector.get_table_size(conn, schema, table)
+        size_display = self._format_size(size_bytes) if size_bytes is not None else ""
+
         # Sampling karar
         sampled = row_count > self.prof_config.sample_threshold
         sample_pct = self.prof_config.sample_percent if sampled else None
@@ -309,6 +368,8 @@ class Profiler:
                 row_count=row_count,
                 estimated_rows=estimated_rows,
                 row_count_estimated=row_estimated,
+                table_size_bytes=size_bytes,
+                table_size_display=size_display,
                 column_count=0,
                 profiled_at=datetime.now().isoformat(),
                 profile_duration_sec=time.time() - start_time,
@@ -348,6 +409,8 @@ class Profiler:
             row_count=row_count,
             estimated_rows=estimated_rows,
             row_count_estimated=row_estimated,
+            table_size_bytes=size_bytes,
+            table_size_display=size_display,
             column_count=len(columns),
             columns=columns,
             profiled_at=datetime.now().isoformat(),
@@ -451,6 +514,41 @@ class Profiler:
         col_prof.quality_flags = flags
 
         return col_prof
+
+    @staticmethod
+    def _format_size(size_bytes: Optional[int]) -> str:
+        """Byte boyutunu okunabilir formata cevir."""
+        if size_bytes is None or size_bytes < 0:
+            return ""
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if abs(size_bytes) < 1024:
+                return f"{size_bytes:.1f} {unit}" if unit != "B" else f"{size_bytes} B"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f} PB"
+
+    def save_checkpoint(self, profile: DatabaseProfile, output_dir: str) -> str:
+        """Sema bazinda checkpoint kaydet (atomic write)."""
+        os.makedirs(output_dir, exist_ok=True)
+        filename = f"profil_{profile.db_alias}_checkpoint.json"
+        filepath = os.path.join(output_dir, filename)
+
+        data = asdict(profile)
+        data["_checkpoint"] = {
+            "completed_schemas": [s.schema_name for s in profile.schemas],
+            "saved_at": datetime.now().isoformat(),
+            "is_complete": False,
+        }
+
+        tmp_path = filepath + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+        os.replace(tmp_path, filepath)
+
+        logger.info(
+            "Checkpoint kaydedildi: %s (%d sema)",
+            filepath, len(profile.schemas),
+        )
+        return filepath
 
     def save_intermediate(self, profile: DatabaseProfile, output_dir: str) -> str:
         """Profilleme sonuclarini JSON olarak kaydet."""
