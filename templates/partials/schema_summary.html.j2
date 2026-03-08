@@ -1,8 +1,8 @@
 <!-- Schema bolumu -->
 <details class="schema-block">
   <summary>
-    <span class="badge badge-{{ grade_fn(schema.schema_quality_score)|lower }}">
-      {{ grade_fn(schema.schema_quality_score) }}
+    <span class="badge badge-{{ schema.schema_quality_grade|lower|replace('/', '') }}">
+      {{ schema.schema_quality_grade }}
     </span>
     <strong>{{ schema.schema_name }}</strong>
     <span style="color:var(--text-muted); font-size:13px;">

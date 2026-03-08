@@ -131,10 +131,9 @@ class ExcelReportGenerator:
             ws.cell(row=row_idx, column=4, value=schema.total_size_display or "-")
             ws.cell(row=row_idx, column=5, value=round(schema.schema_quality_score, 4))
 
-            from src.metrics.quality import QualityScorer
-            grade = QualityScorer.grade(schema.schema_quality_score)
+            grade = schema.schema_quality_grade
             cell = ws.cell(row=row_idx, column=6, value=grade)
-            cell.fill = GRADE_FILLS.get(grade, GRADE_FILLS["F"])
+            cell.fill = GRADE_FILLS.get(grade, GRADE_FILLS["N/A"])
 
             for col in range(1, 7):
                 ws.cell(row=row_idx, column=col).border = THIN_BORDER

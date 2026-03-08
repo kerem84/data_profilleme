@@ -332,7 +332,21 @@ def _dict_to_profile(data: dict) -> DatabaseProfile:
         k: v for k, v in data.items()
         if k in DatabaseProfile.__dataclass_fields__ and k != "schemas"
     }
-    return DatabaseProfile(**db_data, schemas=schemas)
+    profile = DatabaseProfile(**db_data, schemas=schemas)
+    _recalc_grades(profile)
+    return profile
+
+
+def _recalc_grades(profile: DatabaseProfile) -> None:
+    """JSON'dan yuklenen profilde grade'leri yeniden hesapla."""
+    from src.metrics.quality import QualityScorer
+
+    for schema in profile.schemas:
+        scored = [t for t in schema.tables if t.row_count > 0 and t.column_count > 0 and t.table_quality_grade != "N/A"]
+        if scored:
+            schema.schema_quality_grade = QualityScorer.grade(schema.schema_quality_score)
+        else:
+            schema.schema_quality_grade = "N/A"
 
 
 if __name__ == "__main__":

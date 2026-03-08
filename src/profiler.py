@@ -99,6 +99,7 @@ class SchemaProfile:
     total_size_display: str = ""
     tables: List[TableProfile] = field(default_factory=list)
     schema_quality_score: float = 0.0
+    schema_quality_grade: str = "N/A"
 
 
 @dataclass
@@ -291,15 +292,17 @@ class Profiler:
             schema_prof.total_size_bytes = sum(sizes)
             schema_prof.total_size_display = self._format_size(schema_prof.total_size_bytes)
 
-        # Schema quality (bos tablolar haric)
+        # Schema quality (bos/kolonsuz tablolar haric)
         scored_tables = [
             t for t in schema_prof.tables
-            if t.row_count > 0 and t.table_quality_grade != "N/A"
+            if t.row_count > 0 and t.column_count > 0 and t.table_quality_grade != "N/A"
         ]
         if scored_tables:
             schema_prof.schema_quality_score = sum(
                 t.table_quality_score for t in scored_tables
             ) / len(scored_tables)
+            from src.metrics.quality import QualityScorer
+            schema_prof.schema_quality_grade = QualityScorer.grade(schema_prof.schema_quality_score)
 
         return schema_prof
 
@@ -371,6 +374,8 @@ class Profiler:
                 table_size_bytes=size_bytes,
                 table_size_display=size_display,
                 column_count=0,
+                table_quality_score=0.0,
+                table_quality_grade="N/A",
                 profiled_at=datetime.now().isoformat(),
                 profile_duration_sec=time.time() - start_time,
                 sampled=sampled,
@@ -388,8 +393,8 @@ class Profiler:
                     schema, table, cm.get("column_name", "?"), e,
                 )
 
-        # Table quality (bos tablolar N/A olur, ortalamaya dahil edilmez)
-        if row_count == 0:
+        # Table quality (bos tablolar veya kolon metadatasi alinamayan tablolar N/A)
+        if row_count == 0 or len(columns) == 0:
             tq_score = 0.0
             tq_grade = "N/A"
         else:
