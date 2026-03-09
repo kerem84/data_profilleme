@@ -1,0 +1,5 @@
+sqlalchemy>=2.0
+psycopg2-binary       # PostgreSQL driver
+pymssql               # MSSQL driver (no ODBC needed)
+oracledb              # Oracle thin driver (no Oracle Client needed)
+pandas                # DataFrame support

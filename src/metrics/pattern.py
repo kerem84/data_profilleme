@@ -14,6 +14,8 @@ STRING_TYPES = {
     "name", "citext", "bpchar",
     # MSSQL
     "nvarchar", "nchar", "ntext",
+    # Oracle
+    "varchar2", "nvarchar2", "clob", "nclob", "long",
 }
 
 # MSSQL icin bilinen pattern'lerin LIKE/PATINDEX karsiliklari
@@ -34,6 +36,23 @@ _MSSQL_PATTERN_MAP = {
     "url": "(val LIKE 'http://%' OR val LIKE 'https://%')",
     "json_object": "(LEFT(val, 1) = '{' AND RIGHT(val, 1) = '}')",
     "numeric_string": "(PATINDEX('%[^0-9.+-]%', val) = 0 AND LEN(val) > 0)",
+}
+
+# Oracle icin REGEXP_LIKE tabanli pattern karsiliklari
+_ORACLE_PATTERN_MAP = {
+    "email": "REGEXP_LIKE(val, '.+@.+\\..+')",
+    "phone_tr": (
+        "(REGEXP_LIKE(val, '^\\+90[0-9]{10}$')"
+        " OR REGEXP_LIKE(val, '^0[0-9]{10}$')"
+        " OR (LENGTH(val) = 10 AND REGEXP_LIKE(val, '^[0-9]+$')))"
+    ),
+    "tc_kimlik": "(LENGTH(val) = 11 AND SUBSTR(val,1,1) != '0' AND REGEXP_LIKE(val, '^[0-9]+$'))",
+    "uuid": "REGEXP_LIKE(val, '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')",
+    "iso_date": "REGEXP_LIKE(val, '^[0-9]{4}-[0-9]{2}-[0-9]{2}')",
+    "iso_datetime": "REGEXP_LIKE(val, '^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}')",
+    "url": "(val LIKE 'http://%' OR val LIKE 'https://%')",
+    "json_object": "(SUBSTR(val,1,1) = '{' AND SUBSTR(val,-1) = '}')",
+    "numeric_string": "(REGEXP_LIKE(val, '^[0-9.+-]+$') AND LENGTH(val) > 0)",
 }
 
 
@@ -72,7 +91,20 @@ class PatternAnalyzer:
         quoted_table = self.sql.validate_identifier(table)
         quoted_column = self.sql.validate_identifier(column)
 
-        if self.db_type == "mssql":
+        if self.db_type == "oracle":
+            sql = f"""
+                SELECT
+                    COUNT(*) AS sample_size,
+                    {pattern_cases}
+                FROM (
+                    SELECT CAST({quoted_column} AS VARCHAR2(4000)) AS val
+                    FROM {quoted_schema}.{quoted_table}
+                    WHERE {quoted_column} IS NOT NULL
+                    FETCH FIRST {self.max_sample} ROWS ONLY
+                ) sub
+            """
+            params = None
+        elif self.db_type == "mssql":
             sql = f"""
                 SELECT
                     COUNT(*) AS sample_size,
@@ -151,6 +183,8 @@ class PatternAnalyzer:
         """SQL pattern CASE ifadelerini olustur."""
         if self.db_type == "mssql":
             return self._build_mssql_pattern_cases()
+        if self.db_type == "oracle":
+            return self._build_oracle_pattern_cases()
         return self._build_pg_pattern_cases()
 
     def _build_pg_pattern_cases(self) -> str:
@@ -169,6 +203,16 @@ class PatternAnalyzer:
         cases = []
         for pattern_name in self.patterns:
             expr = _MSSQL_PATTERN_MAP.get(pattern_name, "1=0")
+            cases.append(
+                f"SUM(CASE WHEN {expr} THEN 1 ELSE 0 END) AS pattern_{pattern_name}"
+            )
+        return ",\n                ".join(cases)
+
+    def _build_oracle_pattern_cases(self) -> str:
+        """Oracle REGEXP_LIKE tabanli pattern ifadeleri."""
+        cases = []
+        for pattern_name in self.patterns:
+            expr = _ORACLE_PATTERN_MAP.get(pattern_name, "1=0")
             cases.append(
                 f"SUM(CASE WHEN {expr} THEN 1 ELSE 0 END) AS pattern_{pattern_name}"
             )
