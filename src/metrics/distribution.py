@@ -7,7 +7,7 @@ from src.sql_loader import SqlLoader
 
 logger = logging.getLogger(__name__)
 
-# Numerik veri tipleri (PostgreSQL + MSSQL)
+# Numerik veri tipleri (PostgreSQL + MSSQL + Oracle + HANA)
 NUMERIC_TYPES = {
     # PostgreSQL
     "smallint", "integer", "bigint", "decimal", "numeric",
@@ -17,6 +17,8 @@ NUMERIC_TYPES = {
     "int", "tinyint", "float", "bit", "smallmoney",
     # Oracle
     "number", "binary_float", "binary_double",
+    # HANA
+    "double", "smalldecimal", "decfloat16", "decfloat34",
 }
 
 
@@ -55,6 +57,9 @@ class DistributionMetrics:
                 elif self.db_type == "oracle":
                     # Oracle: :total_count, :top_n named binds
                     cur.execute(sql, {"total_count": row_count, "top_n": top_n})
+                elif self.db_type == "hanabw":
+                    # HANA: ? positional -> total_count, top_n
+                    cur.execute(sql, [row_count, top_n])
                 else:
                     cur.execute(sql, {"total_count": row_count, "top_n": top_n})
                 rows = cur.fetchall()

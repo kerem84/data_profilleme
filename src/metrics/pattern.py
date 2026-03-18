@@ -7,7 +7,7 @@ from src.sql_loader import SqlLoader
 
 logger = logging.getLogger(__name__)
 
-# String veri tipleri (PostgreSQL + MSSQL)
+# String veri tipleri (PostgreSQL + MSSQL + Oracle + HANA)
 STRING_TYPES = {
     # PostgreSQL
     "character varying", "varchar", "character", "char", "text",
@@ -16,6 +16,8 @@ STRING_TYPES = {
     "nvarchar", "nchar", "ntext",
     # Oracle
     "varchar2", "nvarchar2", "clob", "nclob", "long",
+    # HANA
+    "shorttext", "alphanum",
 }
 
 # MSSQL icin bilinen pattern'lerin LIKE/PATINDEX karsiliklari
@@ -53,6 +55,23 @@ _ORACLE_PATTERN_MAP = {
     "url": "(val LIKE 'http://%' OR val LIKE 'https://%')",
     "json_object": "(SUBSTR(val,1,1) = '{' AND SUBSTR(val,-1) = '}')",
     "numeric_string": "(REGEXP_LIKE(val, '^[0-9.+-]+$') AND LENGTH(val) > 0)",
+}
+
+# HANA icin LIKE_REGEXPR tabanli pattern karsiliklari
+_HANA_PATTERN_MAP = {
+    "email": "LIKE_REGEXPR('.+@.+\\..+', val) = 1",
+    "phone_tr": (
+        "(LIKE_REGEXPR('^\\+90[0-9]{10}$', val) = 1"
+        " OR LIKE_REGEXPR('^0[0-9]{10}$', val) = 1"
+        " OR (LENGTH(val) = 10 AND LIKE_REGEXPR('^[0-9]+$', val) = 1))"
+    ),
+    "tc_kimlik": "(LENGTH(val) = 11 AND SUBSTR(val,1,1) != '0' AND LIKE_REGEXPR('^[0-9]+$', val) = 1)",
+    "uuid": "LIKE_REGEXPR('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', val) = 1",
+    "iso_date": "LIKE_REGEXPR('^[0-9]{4}-[0-9]{2}-[0-9]{2}', val) = 1",
+    "iso_datetime": "LIKE_REGEXPR('^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}', val) = 1",
+    "url": "(val LIKE 'http://%' OR val LIKE 'https://%')",
+    "json_object": "(SUBSTR(val,1,1) = '{' AND SUBSTR(val,LENGTH(val),1) = '}')",
+    "numeric_string": "(LIKE_REGEXPR('^[0-9.+-]+$', val) = 1 AND LENGTH(val) > 0)",
 }
 
 
@@ -115,6 +134,19 @@ class PatternAnalyzer:
                     FROM {quoted_schema}.{quoted_table}
                     WHERE {quoted_column} IS NOT NULL
                 ) sub;
+            """
+            params = None
+        elif self.db_type == "hanabw":
+            sql = f"""
+                SELECT
+                    COUNT(*) AS sample_size,
+                    {pattern_cases}
+                FROM (
+                    SELECT CAST({quoted_column} AS NVARCHAR(5000)) AS val
+                    FROM {quoted_schema}.{quoted_table}
+                    WHERE {quoted_column} IS NOT NULL
+                    LIMIT {self.max_sample}
+                ) sub
             """
             params = None
         else:
@@ -185,6 +217,8 @@ class PatternAnalyzer:
             return self._build_mssql_pattern_cases()
         if self.db_type == "oracle":
             return self._build_oracle_pattern_cases()
+        if self.db_type == "hanabw":
+            return self._build_hana_pattern_cases()
         return self._build_pg_pattern_cases()
 
     def _build_pg_pattern_cases(self) -> str:
@@ -213,6 +247,16 @@ class PatternAnalyzer:
         cases = []
         for pattern_name in self.patterns:
             expr = _ORACLE_PATTERN_MAP.get(pattern_name, "1=0")
+            cases.append(
+                f"SUM(CASE WHEN {expr} THEN 1 ELSE 0 END) AS pattern_{pattern_name}"
+            )
+        return ",\n                ".join(cases)
+
+    def _build_hana_pattern_cases(self) -> str:
+        """HANA LIKE_REGEXPR tabanli pattern ifadeleri."""
+        cases = []
+        for pattern_name in self.patterns:
+            expr = _HANA_PATTERN_MAP.get(pattern_name, "1=0")
             cases.append(
                 f"SUM(CASE WHEN {expr} THEN 1 ELSE 0 END) AS pattern_{pattern_name}"
             )
