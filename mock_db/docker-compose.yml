@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: mock_postgres
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: Test1234!
+      POSTGRES_DB: mockdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # ── Microsoft SQL Server 2022 ──────────────────────
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mock_mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Test1234!"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+  # ── Oracle XE 21c (gvenzl slim) ──────────────────
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: mock_oracle
+    environment:
+      ORACLE_PASSWORD: "Test1234!"
+      APP_USER: "testuser"
+      APP_USER_PASSWORD: "Test1234!"
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+
+volumes:
+  pg_data:
+  mssql_data:
+  oracle_data:

@@ -9,6 +9,9 @@ def create_connector(config: DatabaseConfig) -> BaseConnector:
     if config.db_type == "mssql":
         from src.mssql_connector import MssqlConnector
         return MssqlConnector(config)
+    elif config.db_type == "oracle":
+        from src.oracle_connector import OracleConnector
+        return OracleConnector(config)
     else:
         from src.db_connector import PostgresConnector
         return PostgresConnector(config)

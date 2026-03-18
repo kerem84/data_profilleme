@@ -318,8 +318,10 @@ class Profiler:
                 if self.db_config.db_type == "mssql":
                     cur.execute(sql, [schema])
                 else:
+                    # PostgreSQL %(schema_name)s ve Oracle :schema_name
                     cur.execute(sql, {"schema_name": schema})
-                cols = [desc[0] for desc in cur.description]
+                # Oracle kolon adlarini uppercase dondurur, normalize et
+                cols = [desc[0].lower() for desc in cur.description]
                 rows = cur.fetchall()
         except Exception as e:
             logger.warning("[%s] Metadata cekme hatasi: %s", schema, e)

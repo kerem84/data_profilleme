@@ -37,6 +37,9 @@ class OutlierDetector:
                 if self.db_type == "mssql":
                     # MSSQL: ? positional params (multiplier x2)
                     cur.execute(sql, [iqr_multiplier, iqr_multiplier])
+                elif self.db_type == "oracle":
+                    # Oracle: :iqr_multiplier named bind (2 kez kullaniliyor, tek dict yeterli)
+                    cur.execute(sql, {"iqr_multiplier": iqr_multiplier})
                 else:
                     cur.execute(sql, {"iqr_multiplier": iqr_multiplier})
                 row = cur.fetchone()

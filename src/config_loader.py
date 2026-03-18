@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 
-VALID_DB_TYPES = ("postgresql", "mssql")
+VALID_DB_TYPES = ("postgresql", "mssql", "oracle")
 
 
 @dataclass
@@ -23,6 +23,7 @@ class DatabaseConfig:
     statement_timeout: int = 300000
     schema_filter: Union[str, List[str]] = "*"
     driver: str = "ODBC Driver 17 for SQL Server"
+    service_name: str = ""
 
 
 @dataclass
@@ -120,6 +121,7 @@ def load_config(path: str) -> AppConfig:
             statement_timeout=int(db_data.get("statement_timeout", 300000)),
             schema_filter=db_data.get("schema_filter", "*"),
             driver=db_data.get("driver", "ODBC Driver 17 for SQL Server"),
+            service_name=db_data.get("service_name", ""),
         )
 
     # Profiling

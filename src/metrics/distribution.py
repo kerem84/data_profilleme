@@ -15,6 +15,8 @@ NUMERIC_TYPES = {
     "int2", "int4", "int8", "float4", "float8", "money",
     # MSSQL
     "int", "tinyint", "float", "bit", "smallmoney",
+    # Oracle
+    "number", "binary_float", "binary_double",
 }
 
 
@@ -50,6 +52,9 @@ class DistributionMetrics:
                 if self.db_type == "mssql":
                     # MSSQL: TOP (?), ? -> top_n, total_count
                     cur.execute(sql, [top_n, row_count])
+                elif self.db_type == "oracle":
+                    # Oracle: :total_count, :top_n named binds
+                    cur.execute(sql, {"total_count": row_count, "top_n": top_n})
                 else:
                     cur.execute(sql, {"total_count": row_count, "top_n": top_n})
                 rows = cur.fetchall()
