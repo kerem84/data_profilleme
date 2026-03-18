@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 
-VALID_DB_TYPES = ("postgresql", "mssql", "oracle")
+VALID_DB_TYPES = ("postgresql", "mssql", "oracle", "hanabw")
 
 
 @dataclass
@@ -24,6 +24,8 @@ class DatabaseConfig:
     schema_filter: Union[str, List[str]] = "*"
     driver: str = "ODBC Driver 17 for SQL Server"
     service_name: str = ""
+    bw_table_filter: List[str] = field(default_factory=lambda: ["/BIC/A", "/BIC/F"])
+    bw_description_lang: str = "TR"
 
 
 @dataclass
@@ -102,8 +104,13 @@ def load_config(path: str) -> AppConfig:
 
     databases: Dict[str, DatabaseConfig] = {}
     for alias, db_data in db_raw.items():
-        _require_keys(db_data, ["host", "port", "dbname", "user", "password"], f"databases.{alias}")
         db_type = db_data.get("db_type", "postgresql")
+        if db_type == "hanabw":
+            _require_keys(db_data, ["host", "port", "user", "password"], f"databases.{alias}")
+            dbname = db_data.get("dbname", "")
+        else:
+            _require_keys(db_data, ["host", "port", "dbname", "user", "password"], f"databases.{alias}")
+            dbname = db_data["dbname"]
         if db_type not in VALID_DB_TYPES:
             raise ConfigError(
                 f"Gecersiz db_type: '{db_type}' (databases.{alias}). "
@@ -113,7 +120,7 @@ def load_config(path: str) -> AppConfig:
             alias=alias,
             host=db_data["host"],
             port=int(db_data["port"]),
-            dbname=db_data["dbname"],
+            dbname=dbname,
             user=db_data["user"],
             password=db_data["password"],
             db_type=db_type,
@@ -122,6 +129,8 @@ def load_config(path: str) -> AppConfig:
             schema_filter=db_data.get("schema_filter", "*"),
             driver=db_data.get("driver", "ODBC Driver 17 for SQL Server"),
             service_name=db_data.get("service_name", ""),
+            bw_table_filter=db_data.get("bw_table_filter", ["/BIC/A", "/BIC/F"]),
+            bw_description_lang=db_data.get("bw_description_lang", "TR"),
         )
 
     # Profiling

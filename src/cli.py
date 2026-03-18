@@ -35,7 +35,7 @@ def setup_logging(level: str, log_file: str) -> None:
 def parse_args() -> argparse.Namespace:
     """CLI argumanlari."""
     parser = argparse.ArgumentParser(
-        description="Kaynak Tablo Profilleme Araci (PostgreSQL / MSSQL)",
+        description="Kaynak Tablo Profilleme Araci (PostgreSQL / MSSQL / Oracle / HANA BW)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

@@ -66,6 +66,8 @@ class ColumnProfile:
     # Mapping
     dwh_mapped: bool = False
     dwh_targets: List[str] = field(default_factory=list)
+    # Description (BW enrichment)
+    column_description: str = ""
 
 
 @dataclass
@@ -317,6 +319,10 @@ class Profiler:
             with conn.cursor() as cur:
                 if self.db_config.db_type == "mssql":
                     cur.execute(sql, [schema])
+                elif self.db_config.db_type == "hanabw":
+                    # HANA metadata: ? (lang_code), ? (schema_name)
+                    sap_lang = self.connector.get_sap_lang_code()
+                    cur.execute(sql, [sap_lang, schema])
                 else:
                     # PostgreSQL %(schema_name)s ve Oracle :schema_name
                     cur.execute(sql, {"schema_name": schema})
@@ -453,6 +459,7 @@ class Profiler:
             referenced_schema=col_meta.get("referenced_schema"),
             referenced_table=col_meta.get("referenced_table"),
             referenced_column=col_meta.get("referenced_column"),
+            column_description=col_meta.get("column_description") or "",
         )
 
         if row_count == 0:
