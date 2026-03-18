@@ -42,7 +42,7 @@ Implements `BaseConnector` abstract interface.
 - `RSZELTTXT` — Query/element descriptions
 - Graceful fallback: if description not found, technical name only
 
-**Parameter binding:** `?` positional (hdbcli standard)
+**Parameter binding:** `?` positional throughout all SQL templates and connector internal queries. hdbcli supports both positional `?` and named `:param`, but we use positional `?` consistently (same as MSSQL connector) for uniformity.
 
 **Identifier quoting:** `"identifier"` (double quotes, HANA standard SQL)
 
@@ -59,7 +59,7 @@ Implements `BaseConnector` abstract interface.
 | `top_n_values.sql` | `LIMIT ?` (HANA native) |
 | `histogram.sql` | `CASE WHEN` manual bucketing (no WIDTH_BUCKET in HANA) |
 | `numeric_stats.sql` | `PERCENTILE_CONT` / `PERCENTILE_DISC` (HANA supports) |
-| `pattern_analysis.sql` | `LIKE_REGEXPR(?, column_name) = 1` |
+| `pattern_analysis.sql` | `LIKE_REGEXPR(?, {column_name}) = 1` (positional binding) |
 | `outlier_detection.sql` | Window function + `PERCENTILE_CONT` for quartiles |
 
 ### 3. Configuration
@@ -71,16 +71,19 @@ databases:
     db_type: "hanabw"
     host: "172.24.243.100"
     port: 31015
+    dbname: ""                         # Not used for HANA (host+port sufficient), but required by config schema
     user: "jdbc_read_user"
     password: "***"
     schema_filter: "SAPABAP1"
-    bw_table_filter: ["A*", "F*"]
+    bw_table_filter: ["/BIC/A", "/BIC/F"]   # Full prefix including /BIC/
     bw_description_lang: "TR"
 ```
 
+**Config validation for `dbname`:** HANA connections don't use a database name (tenant is determined by port). The `dbname` field remains in config for schema compatibility but is ignored by the HANA connector. Config validation must allow empty string for `hanabw` db_type.
+
 **New DatabaseConfig fields:**
-- `bw_table_filter: List[str]` — BW table prefix filters (default: `["A*", "F*"]`)
-- `bw_description_lang: str` — Description language code (default: `"TR"`)
+- `bw_table_filter: List[str]` — BW table prefix filters including full path (default: `["/BIC/A", "/BIC/F"]`). Tables whose names start with any of these prefixes will be included.
+- `bw_description_lang: str` — SAP language code for descriptions: `"TR"` for Turkish (LANGU='T'), `"EN"` for English (LANGU='E'). Default: `"TR"`.
 
 These fields are only relevant when `db_type = "hanabw"`.
 
@@ -103,7 +106,7 @@ elif config.db_type == "hanabw":
 - `"TINYINT"`, `"SMALLINT"`, `"INTEGER"`, `"BIGINT"`, `"DECIMAL"`, `"REAL"`, `"DOUBLE"`, `"SMALLDECIMAL"`
 
 `pattern.py` HANA dialect:
-- Uses `LIKE_REGEXPR(:pattern, {column_name}) = 1` syntax
+- Uses `LIKE_REGEXPR(?, {column_name}) = 1` syntax (positional binding, consistent with all templates)
 - New branch alongside PostgreSQL (`~`), MSSQL (`PATINDEX`), Oracle (`REGEXP_LIKE`)
 
 ### 5. Data Model Change
