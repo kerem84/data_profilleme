@@ -226,8 +226,18 @@ def main() -> None:
         profiler = Profiler(config, db_key)
 
         # Schema/table filtresi
-        if args.schema:
-            config.databases[db_key].schema_filter = [args.schema]
+        if args.table:
+            # format: schema.table_name
+            parts = args.table.split(".", 1)
+            if len(parts) == 2:
+                config.databases[db_key].schema_filter = [parts[0]]
+                table_filter = parts[1]
+            else:
+                table_filter = parts[0]
+        else:
+            table_filter = None
+            if args.schema:
+                config.databases[db_key].schema_filter = [args.schema]
 
         # Resume: checkpoint yukle
         resumed_profile = None
@@ -237,6 +247,7 @@ def main() -> None:
         profile = profiler.profile_database(
             resumed_profile=resumed_profile,
             checkpoint_dir=config.output_dir,
+            table_filter=table_filter,
         )
 
         # Mapping annotasyonu

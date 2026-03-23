@@ -87,6 +87,7 @@ class TableProfile:
     sampled: bool = False
     sample_percent: Optional[int] = None
     table_quality_score: float = 0.0
+    table_description: str = ""
     table_quality_grade: str = "F"
     dwh_mapped: bool = False
     dwh_target_tables: List[str] = field(default_factory=list)
@@ -149,6 +150,7 @@ class Profiler:
         self,
         resumed_profile: Optional[DatabaseProfile] = None,
         checkpoint_dir: Optional[str] = None,
+        table_filter: Optional[str] = None,
     ) -> DatabaseProfile:
         """Tum veritabanini profille. Resume ve checkpoint destegi."""
         db_profile = DatabaseProfile(
@@ -195,6 +197,8 @@ class Profiler:
                 completed_table_count += completed_schemas[schema].table_count
                 continue
             tables = self.connector.discover_tables(schema)
+            if table_filter:
+                tables = [t for t in tables if t["table_name"] == table_filter]
             schema_tables[schema] = tables
             total_tables += len(tables)
 
@@ -276,8 +280,10 @@ class Profiler:
                 pbar.set_postfix_str(f"{schema}.{table_name}")
 
                 try:
+                    table_desc = table_info.get("table_description", "")
                     table_prof = self._profile_table(
-                        conn, schema, table_name, table_type, estimated, metadata
+                        conn, schema, table_name, table_type, estimated, metadata,
+                        table_description=table_desc,
                     )
                     schema_prof.tables.append(table_prof)
                     schema_prof.total_rows += table_prof.row_count
@@ -321,8 +327,11 @@ class Profiler:
                     cur.execute(sql, [schema])
                 elif self.db_config.db_type == "hanabw":
                     # HANA metadata: ? (lang_code), ? (schema_name)
+                    # RSDIOBJT her zaman SAPABAP1 semasindadir
                     sap_lang = self.connector.get_sap_lang_code()
-                    cur.execute(sql, [sap_lang, schema])
+                    rsdiobjt_schema = schema if schema.upper() == "SAPABAP1" else "SAPABAP1"
+                    hana_sql = sql.replace("RSDIOBJT", f'"{rsdiobjt_schema}".RSDIOBJT')
+                    cur.execute(hana_sql, [sap_lang, schema])
                 else:
                     # PostgreSQL %(schema_name)s ve Oracle :schema_name
                     cur.execute(sql, {"schema_name": schema})
@@ -352,6 +361,7 @@ class Profiler:
         table_type: str,
         estimated_rows: int,
         metadata: Dict[str, List[Dict]],
+        table_description: str = "",
     ) -> TableProfile:
         """Bir tabloyu profille."""
         start_time = time.time()
@@ -382,6 +392,7 @@ class Profiler:
                 table_size_bytes=size_bytes,
                 table_size_display=size_display,
                 column_count=0,
+                table_description=table_description,
                 table_quality_score=0.0,
                 table_quality_grade="N/A",
                 profiled_at=datetime.now().isoformat(),
@@ -426,6 +437,7 @@ class Profiler:
             table_size_display=size_display,
             column_count=len(columns),
             columns=columns,
+            table_description=table_description,
             profiled_at=datetime.now().isoformat(),
             profile_duration_sec=round(duration, 2),
             sampled=sampled,

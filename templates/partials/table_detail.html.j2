@@ -3,6 +3,7 @@
   <summary style="font-size:13px;">
     <span class="badge badge-{{ table.table_quality_grade|lower|replace('/', '') }}">{{ table.table_quality_grade }}</span>
     {{ table.table_name }}
+    {% if table.table_description %}<span style="color:var(--accent); font-size:12px; font-weight:normal;"> &mdash; {{ table.table_description }}</span>{% endif %}
     <span style="color:var(--text-muted); font-size:12px;">
       ({{ "{:,}".format(table.row_count) }} satir{% if table.table_size_display %}, {{ table.table_size_display }}{% endif %}, {{ table.column_count }} kolon{% if table.sampled %}, sampled {{ table.sample_percent }}%{% endif %})
     </span>
@@ -13,6 +14,7 @@
         <tr>
           <th>#</th>
           <th>Kolon</th>
+          <th>Aciklama</th>
           <th>Tip</th>
           <th>NULL</th>
           <th>NULL %</th>
@@ -32,6 +34,7 @@
             {% if col.is_primary_key %}<span style="color:#2d5016;font-size:10px;">PK</span>{% endif %}
             {% if col.is_foreign_key %}<span style="color:#7c5e00;font-size:10px;">FK</span>{% endif %}
           </td>
+          <td style="font-size:11px; color:var(--text-muted);">{{ col.column_description or '' }}</td>
           <td>{{ col.data_type }}{% if col.max_length %}({{ col.max_length }}){% endif %}</td>
           <td>
             <span class="null-bar">

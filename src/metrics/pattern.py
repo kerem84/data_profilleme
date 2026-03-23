@@ -58,20 +58,21 @@ _ORACLE_PATTERN_MAP = {
 }
 
 # HANA icin LIKE_REGEXPR tabanli pattern karsiliklari
+# LIKE_REGEXPR bir operator: val LIKE_REGEXPR 'pattern' (fonksiyon degil!)
 _HANA_PATTERN_MAP = {
-    "email": "LIKE_REGEXPR('.+@.+\\..+', val) = 1",
+    "email": "val LIKE_REGEXPR '.+@.+\\..+'",
     "phone_tr": (
-        "(LIKE_REGEXPR('^\\+90[0-9]{10}$', val) = 1"
-        " OR LIKE_REGEXPR('^0[0-9]{10}$', val) = 1"
-        " OR (LENGTH(val) = 10 AND LIKE_REGEXPR('^[0-9]+$', val) = 1))"
+        "(val LIKE_REGEXPR '^\\+90[0-9]{10}$'"
+        " OR val LIKE_REGEXPR '^0[0-9]{10}$'"
+        " OR (LENGTH(val) = 10 AND val LIKE_REGEXPR '^[0-9]+$'))"
     ),
-    "tc_kimlik": "(LENGTH(val) = 11 AND SUBSTR(val,1,1) != '0' AND LIKE_REGEXPR('^[0-9]+$', val) = 1)",
-    "uuid": "LIKE_REGEXPR('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', val) = 1",
-    "iso_date": "LIKE_REGEXPR('^[0-9]{4}-[0-9]{2}-[0-9]{2}', val) = 1",
-    "iso_datetime": "LIKE_REGEXPR('^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}', val) = 1",
+    "tc_kimlik": "(LENGTH(val) = 11 AND SUBSTR(val,1,1) != '0' AND val LIKE_REGEXPR '^[0-9]+$')",
+    "uuid": "val LIKE_REGEXPR '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'",
+    "iso_date": "val LIKE_REGEXPR '^[0-9]{4}-[0-9]{2}-[0-9]{2}'",
+    "iso_datetime": "val LIKE_REGEXPR '^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}'",
     "url": "(val LIKE 'http://%' OR val LIKE 'https://%')",
     "json_object": "(SUBSTR(val,1,1) = '{' AND SUBSTR(val,LENGTH(val),1) = '}')",
-    "numeric_string": "(LIKE_REGEXPR('^[0-9.+-]+$', val) = 1 AND LENGTH(val) > 0)",
+    "numeric_string": "(val LIKE_REGEXPR '^[0-9.+-]+$' AND LENGTH(val) > 0)",
 }
 
 

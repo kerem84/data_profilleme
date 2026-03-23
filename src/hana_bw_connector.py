@@ -115,22 +115,20 @@ class HanaBwConnector(BaseConnector):
         return all_schemas
 
     def discover_tables(self, schema: str) -> List[Dict[str, Any]]:
-        """BW tablo filtresine gore tablo listesi dondur, RSDCUBET aciklamalari ile."""
+        """BW tablo filtresine gore tablo listesi dondur, BW aciklamalari ile."""
         sql = """
             SELECT
                 t.TABLE_NAME AS table_name,
                 'BASE TABLE' AS table_type,
-                COALESCE(t.RECORD_COUNT, 0) AS estimated_rows,
-                ct.TXTLG AS table_description
+                COALESCE(m.RECORD_COUNT, 0) AS estimated_rows
             FROM TABLES t
-            LEFT JOIN RSDCUBET ct
-                ON t.TABLE_NAME LIKE '%' || ct.INFOCUBE || '%'
-                AND ct.OBJVERS = 'A'
-                AND ct.LANGU = ?
+            LEFT JOIN M_TABLES m
+                ON t.SCHEMA_NAME = m.SCHEMA_NAME
+                AND t.TABLE_NAME = m.TABLE_NAME
             WHERE t.SCHEMA_NAME = ?
             ORDER BY t.TABLE_NAME
         """
-        rows = self.execute_query(sql, [self._sap_lang, schema]) or []
+        rows = self.execute_query(sql, [schema]) or []
 
         if self._bw_table_filter:
             rows = [
@@ -141,7 +139,54 @@ class HanaBwConnector(BaseConnector):
                 )
             ]
 
+        # BW aciklamalarini Python tarafinda ekle
+        descriptions = self._load_bw_table_descriptions(schema)
+        for row in rows:
+            bw_name = self._extract_bw_object_name(row["table_name"])
+            row["table_description"] = descriptions.get(bw_name, "") if bw_name else ""
+
         return rows
+
+    @staticmethod
+    def _extract_bw_object_name(table_name: str) -> Optional[str]:
+        """BW tablo adindan InfoProvider adini cikar.
+
+        DSO active:  /BIC/A<ODSOBJECT>00  -> ODSOBJECT
+        DSO cl:      /BIC/A<ODSOBJECT>40  -> ODSOBJECT
+        InfoCube:    /BIC/F<INFOCUBE>     -> INFOCUBE
+        """
+        if table_name.startswith("/BIC/A") and len(table_name) > 8:
+            return table_name[6:-2]  # /BIC/A...00 veya /BIC/A...40
+        if table_name.startswith("/BIC/F") and len(table_name) > 6:
+            return table_name[6:]
+        return None
+
+    def _load_bw_table_descriptions(self, schema: str) -> Dict[str, str]:
+        """RSDCUBET (InfoCube) ve RSDODSOT (DSO) aciklamalarini yukle."""
+        bw_schema = schema if schema.upper() == "SAPABAP1" else "SAPABAP1"
+        descriptions: Dict[str, str] = {}
+
+        # InfoCube aciklamalari
+        sql_cube = f"""
+            SELECT INFOCUBE, TXTLG
+            FROM "{bw_schema}".RSDCUBET
+            WHERE OBJVERS = 'A' AND LANGU = ?
+        """
+        rows = self.execute_query(sql_cube, [self._sap_lang]) or []
+        for r in rows:
+            descriptions[r["infocube"]] = r["txtlg"]
+
+        # DSO aciklamalari
+        sql_dso = f"""
+            SELECT ODSOBJECT, TXTLG
+            FROM "{bw_schema}".RSDODSOT
+            WHERE OBJVERS = 'A' AND LANGU = ?
+        """
+        rows = self.execute_query(sql_dso, [self._sap_lang]) or []
+        for r in rows:
+            descriptions[r["odsobject"]] = r["txtlg"]
+
+        return descriptions
 
     def get_query_timeout_error(self) -> type:
         """HANA timeout exception."""
@@ -153,7 +198,7 @@ class HanaBwConnector(BaseConnector):
         """Tahmini satir sayisi (TABLES.RECORD_COUNT)."""
         sql = """
             SELECT COALESCE(RECORD_COUNT, 0)
-            FROM TABLES
+            FROM M_TABLES
             WHERE SCHEMA_NAME = ? AND TABLE_NAME = ?
         """
         try:

@@ -144,7 +144,7 @@ class ExcelReportGenerator:
         """Tablo Profil sheeti."""
         ws = wb.create_sheet("Tablo Profil")
         headers = [
-            "Sema", "Tablo", "Tip", "Satir Sayisi", "Tahmini", "Boyut",
+            "Sema", "Tablo", "Aciklama", "Tip", "Satir Sayisi", "Tahmini", "Boyut",
             "Kolon Sayisi", "Sampling", "Sample %",
             "Kalite Skoru", "Kalite Notu", "Sure (sn)",
         ]
@@ -155,21 +155,22 @@ class ExcelReportGenerator:
             for table in schema.tables:
                 ws.cell(row=row_idx, column=1, value=table.schema_name)
                 ws.cell(row=row_idx, column=2, value=table.table_name)
-                ws.cell(row=row_idx, column=3, value=table.table_type)
-                ws.cell(row=row_idx, column=4, value=table.row_count)
-                ws.cell(row=row_idx, column=5, value="Evet" if table.row_count_estimated else "Hayir")
-                ws.cell(row=row_idx, column=6, value=table.table_size_display or "-")
-                ws.cell(row=row_idx, column=7, value=table.column_count)
-                ws.cell(row=row_idx, column=8, value="Evet" if table.sampled else "Hayir")
-                ws.cell(row=row_idx, column=9, value=table.sample_percent or "")
-                ws.cell(row=row_idx, column=10, value=round(table.table_quality_score, 4))
+                ws.cell(row=row_idx, column=3, value=table.table_description)
+                ws.cell(row=row_idx, column=4, value=table.table_type)
+                ws.cell(row=row_idx, column=5, value=table.row_count)
+                ws.cell(row=row_idx, column=6, value="Evet" if table.row_count_estimated else "Hayir")
+                ws.cell(row=row_idx, column=7, value=table.table_size_display or "-")
+                ws.cell(row=row_idx, column=8, value=table.column_count)
+                ws.cell(row=row_idx, column=9, value="Evet" if table.sampled else "Hayir")
+                ws.cell(row=row_idx, column=10, value=table.sample_percent or "")
+                ws.cell(row=row_idx, column=11, value=round(table.table_quality_score, 4))
 
-                grade_cell = ws.cell(row=row_idx, column=11, value=table.table_quality_grade)
+                grade_cell = ws.cell(row=row_idx, column=12, value=table.table_quality_grade)
                 grade_cell.fill = GRADE_FILLS.get(table.table_quality_grade, GRADE_FILLS["F"])
 
-                ws.cell(row=row_idx, column=12, value=table.profile_duration_sec)
+                ws.cell(row=row_idx, column=13, value=table.profile_duration_sec)
 
-                for col in range(1, 13):
+                for col in range(1, 14):
                     ws.cell(row=row_idx, column=col).border = THIN_BORDER
                 row_idx += 1
 
