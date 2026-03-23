@@ -5,6 +5,7 @@ import re
 from typing import Dict
 
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_HANA_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_/][a-zA-Z0-9_/]*$")
 
 
 class SqlLoader:
@@ -47,13 +48,20 @@ class SqlLoader:
     def validate_identifier(self, name: str) -> str:
         """
         SQL identifier'ini dogrula ve dialect'e gore quote et.
-        PostgreSQL: "name", MSSQL: [name]
+        PostgreSQL: "name", MSSQL: [name], HANA BW: "name" (/ destekli)
         """
-        if not _IDENTIFIER_RE.match(name):
-            raise ValueError(
-                f"Gecersiz SQL identifier: '{name}'. "
-                "Sadece harf, rakam ve alt cizgi kabul edilir."
-            )
+        if self.db_type == "hanabw":
+            if not _HANA_IDENTIFIER_RE.match(name):
+                raise ValueError(
+                    f"Gecersiz SQL identifier: '{name}'. "
+                    "HANA icin harf, rakam, alt cizgi ve / kabul edilir."
+                )
+        else:
+            if not _IDENTIFIER_RE.match(name):
+                raise ValueError(
+                    f"Gecersiz SQL identifier: '{name}'. "
+                    "Sadece harf, rakam ve alt cizgi kabul edilir."
+                )
         if self.db_type == "mssql":
             return f"[{name}]"
         return f'"{name}"'

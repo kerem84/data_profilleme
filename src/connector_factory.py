@@ -12,6 +12,9 @@ def create_connector(config: DatabaseConfig) -> BaseConnector:
     elif config.db_type == "oracle":
         from src.oracle_connector import OracleConnector
         return OracleConnector(config)
+    elif config.db_type == "hanabw":
+        from src.hana_bw_connector import HanaBwConnector
+        return HanaBwConnector(config)
     else:
         from src.db_connector import PostgresConnector
         return PostgresConnector(config)

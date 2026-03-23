@@ -144,7 +144,7 @@ class ExcelReportGenerator:
         """Tablo Profil sheeti."""
         ws = wb.create_sheet("Tablo Profil")
         headers = [
-            "Sema", "Tablo", "Tip", "Satir Sayisi", "Tahmini", "Boyut",
+            "Sema", "Tablo", "Aciklama", "Tip", "Satir Sayisi", "Tahmini", "Boyut",
             "Kolon Sayisi", "Sampling", "Sample %",
             "Kalite Skoru", "Kalite Notu", "Sure (sn)",
         ]
@@ -155,21 +155,22 @@ class ExcelReportGenerator:
             for table in schema.tables:
                 ws.cell(row=row_idx, column=1, value=table.schema_name)
                 ws.cell(row=row_idx, column=2, value=table.table_name)
-                ws.cell(row=row_idx, column=3, value=table.table_type)
-                ws.cell(row=row_idx, column=4, value=table.row_count)
-                ws.cell(row=row_idx, column=5, value="Evet" if table.row_count_estimated else "Hayir")
-                ws.cell(row=row_idx, column=6, value=table.table_size_display or "-")
-                ws.cell(row=row_idx, column=7, value=table.column_count)
-                ws.cell(row=row_idx, column=8, value="Evet" if table.sampled else "Hayir")
-                ws.cell(row=row_idx, column=9, value=table.sample_percent or "")
-                ws.cell(row=row_idx, column=10, value=round(table.table_quality_score, 4))
+                ws.cell(row=row_idx, column=3, value=table.table_description)
+                ws.cell(row=row_idx, column=4, value=table.table_type)
+                ws.cell(row=row_idx, column=5, value=table.row_count)
+                ws.cell(row=row_idx, column=6, value="Evet" if table.row_count_estimated else "Hayir")
+                ws.cell(row=row_idx, column=7, value=table.table_size_display or "-")
+                ws.cell(row=row_idx, column=8, value=table.column_count)
+                ws.cell(row=row_idx, column=9, value="Evet" if table.sampled else "Hayir")
+                ws.cell(row=row_idx, column=10, value=table.sample_percent or "")
+                ws.cell(row=row_idx, column=11, value=round(table.table_quality_score, 4))
 
-                grade_cell = ws.cell(row=row_idx, column=11, value=table.table_quality_grade)
+                grade_cell = ws.cell(row=row_idx, column=12, value=table.table_quality_grade)
                 grade_cell.fill = GRADE_FILLS.get(table.table_quality_grade, GRADE_FILLS["F"])
 
-                ws.cell(row=row_idx, column=12, value=table.profile_duration_sec)
+                ws.cell(row=row_idx, column=13, value=table.profile_duration_sec)
 
-                for col in range(1, 13):
+                for col in range(1, 14):
                     ws.cell(row=row_idx, column=col).border = THIN_BORDER
                 row_idx += 1
 
@@ -179,7 +180,7 @@ class ExcelReportGenerator:
         """Kolon Profil sheeti (ana veri)."""
         ws = wb.create_sheet("Kolon Profil")
         headers = [
-            "Sema", "Tablo", "Kolon", "Sira", "Veri Tipi", "Max Uzunluk",
+            "Sema", "Tablo", "Kolon", "Aciklama", "Sira", "Veri Tipi", "Max Uzunluk",
             "Nullable", "PK", "FK",
             "NULL Sayisi", "NULL Orani", "Distinct Sayisi", "Distinct Orani",
             "Min", "Max",
@@ -195,42 +196,43 @@ class ExcelReportGenerator:
                     ws.cell(row=row_idx, column=1, value=table.schema_name)
                     ws.cell(row=row_idx, column=2, value=table.table_name)
                     ws.cell(row=row_idx, column=3, value=col.column_name)
-                    ws.cell(row=row_idx, column=4, value=col.ordinal_position)
-                    ws.cell(row=row_idx, column=5, value=col.data_type)
-                    ws.cell(row=row_idx, column=6, value=col.max_length or "")
-                    ws.cell(row=row_idx, column=7, value=col.is_nullable)
-                    ws.cell(row=row_idx, column=8, value="PK" if col.is_primary_key else "")
-                    ws.cell(row=row_idx, column=9, value="FK" if col.is_foreign_key else "")
-                    ws.cell(row=row_idx, column=10, value=col.null_count)
-                    ws.cell(row=row_idx, column=11, value=col.null_ratio)
-                    ws.cell(row=row_idx, column=12, value=col.distinct_count)
-                    ws.cell(row=row_idx, column=13, value=col.distinct_ratio)
-                    ws.cell(row=row_idx, column=14, value=col.min_value or "")
-                    ws.cell(row=row_idx, column=15, value=col.max_value or "")
-                    ws.cell(row=row_idx, column=16, value=col.mean or "")
-                    ws.cell(row=row_idx, column=17, value=col.stddev or "")
+                    ws.cell(row=row_idx, column=4, value=col.column_description)
+                    ws.cell(row=row_idx, column=5, value=col.ordinal_position)
+                    ws.cell(row=row_idx, column=6, value=col.data_type)
+                    ws.cell(row=row_idx, column=7, value=col.max_length or "")
+                    ws.cell(row=row_idx, column=8, value=col.is_nullable)
+                    ws.cell(row=row_idx, column=9, value="PK" if col.is_primary_key else "")
+                    ws.cell(row=row_idx, column=10, value="FK" if col.is_foreign_key else "")
+                    ws.cell(row=row_idx, column=11, value=col.null_count)
+                    ws.cell(row=row_idx, column=12, value=col.null_ratio)
+                    ws.cell(row=row_idx, column=13, value=col.distinct_count)
+                    ws.cell(row=row_idx, column=14, value=col.distinct_ratio)
+                    ws.cell(row=row_idx, column=15, value=col.min_value or "")
+                    ws.cell(row=row_idx, column=16, value=col.max_value or "")
+                    ws.cell(row=row_idx, column=17, value=col.mean or "")
+                    ws.cell(row=row_idx, column=18, value=col.stddev or "")
 
                     p25 = col.percentiles.get("p25", "") if col.percentiles else ""
                     p50 = col.percentiles.get("p50", "") if col.percentiles else ""
                     p75 = col.percentiles.get("p75", "") if col.percentiles else ""
-                    ws.cell(row=row_idx, column=18, value=p25)
-                    ws.cell(row=row_idx, column=19, value=p50)
-                    ws.cell(row=row_idx, column=20, value=p75)
+                    ws.cell(row=row_idx, column=19, value=p25)
+                    ws.cell(row=row_idx, column=20, value=p50)
+                    ws.cell(row=row_idx, column=21, value=p75)
 
-                    ws.cell(row=row_idx, column=21, value=round(col.quality_score, 4))
-                    grade_cell = ws.cell(row=row_idx, column=22, value=col.quality_grade)
+                    ws.cell(row=row_idx, column=22, value=round(col.quality_score, 4))
+                    grade_cell = ws.cell(row=row_idx, column=23, value=col.quality_grade)
                     grade_cell.fill = GRADE_FILLS.get(col.quality_grade, GRADE_FILLS["F"])
-                    ws.cell(row=row_idx, column=23, value=", ".join(col.quality_flags))
+                    ws.cell(row=row_idx, column=24, value=", ".join(col.quality_flags))
 
                     # PK/FK row renklendirme
                     if col.is_primary_key:
-                        for c in range(1, 24):
+                        for c in range(1, 25):
                             ws.cell(row=row_idx, column=c).fill = PK_FILL
                     elif col.is_foreign_key:
-                        for c in range(1, 24):
+                        for c in range(1, 25):
                             ws.cell(row=row_idx, column=c).fill = FK_FILL
 
-                    for c in range(1, 24):
+                    for c in range(1, 25):
                         ws.cell(row=row_idx, column=c).border = THIN_BORDER
 
                     row_idx += 1

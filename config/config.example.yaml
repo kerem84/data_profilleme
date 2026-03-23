@@ -45,6 +45,20 @@ databases:
   #   statement_timeout: 300000
   #   schema_filter: "*"            # Oracle'da owner = schema
 
+  # SAP HANA BW ornegi:
+  # sap_bw:
+  #   db_type: "hanabw"
+  #   host: "HOSTNAME"
+  #   port: 31015                       # HANA portu (3<instance_no>15)
+  #   dbname: ""                        # HANA icin kullanilmaz
+  #   user: "USERNAME"
+  #   password: "PASSWORD"
+  #   connect_timeout: 15
+  #   statement_timeout: 300000
+  #   schema_filter: "SAPABAP1"         # SAP BW schema
+  #   bw_table_filter: ["/BIC/A", "/BIC/F"]  # DSO aktif + InfoCube fact
+  #   bw_description_lang: "TR"         # Aciklama dili: TR veya EN
+
 profiling:
   top_n_values: 20
   sample_threshold: 5000000
